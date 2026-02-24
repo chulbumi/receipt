@@ -112,4 +112,6 @@ export const adminApi = {
     apiClient.get('/api/admin/reports/monthly', { params: { year } }),
   userReport: (user_id: string, year_month: string) =>
     apiClient.get(`/api/admin/reports/user/${user_id}`, { params: { year_month } }),
+  usersSummary: (year_month: string) =>
+    apiClient.get('/api/admin/reports/users-summary', { params: { year_month } }),
 };

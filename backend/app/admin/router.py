@@ -234,6 +234,75 @@ async def monthly_report(
     return {"year": year, "monthly": list(monthly.values())}
 
 
+@router.get("/reports/users-summary")
+async def users_summary_report(
+    admin: dict = Depends(get_admin_user),
+    year_month: str = Query(..., description="YYYY-MM"),
+):
+    """월별 전체 직원 식대 집계 — 참여자 기준 개인 부담액 합산"""
+    records_table = get_records_table()
+    users_table = get_users_table()
+
+    # 해당 월 전체 영수증 조회
+    resp = records_table.query(
+        IndexName="year_month-registered_by_date-index",
+        KeyConditionExpression=Key("year_month").eq(year_month),
+    )
+    all_items = resp.get("Items", [])
+
+    # 직원별 집계 딕셔너리: {user_id: {amount, count, records}}
+    user_stats: dict = {}
+
+    def ensure_user(uid: str):
+        if uid not in user_stats:
+            user_stats[uid] = {"user_id": uid, "name": "", "department": "", "amount": 0.0, "count": 0}
+
+    for item in all_items:
+        total = float(item.get("total_amount", 0))
+        registered_by = item["registered_by"]
+        participants = item.get("participants", [])
+
+        if participants:
+            # 참여자가 기록된 경우 → 각자 부담액 사용
+            for p in participants:
+                uid = p.get("user_id", "")
+                amt = float(p.get("amount", 0))
+                if uid:
+                    ensure_user(uid)
+                    user_stats[uid]["amount"] += amt
+                    user_stats[uid]["count"] += 1
+        else:
+            # 참여자 없음 → 등록자 전액 부담
+            ensure_user(registered_by)
+            user_stats[registered_by]["amount"] += total
+            user_stats[registered_by]["count"] += 1
+
+    if not user_stats:
+        return {"year_month": year_month, "users": [], "total": 0}
+
+    # 사용자 이름/부서 일괄 조회
+    for uid in user_stats:
+        try:
+            u = users_table.get_item(
+                Key={"user_id": uid},
+                ProjectionExpression="user_id, #n, department",
+                ExpressionAttributeNames={"#n": "name"},
+            ).get("Item", {})
+            user_stats[uid]["name"] = u.get("name", uid)
+            user_stats[uid]["department"] = u.get("department", "")
+        except Exception:
+            user_stats[uid]["name"] = uid
+
+    result = sorted(user_stats.values(), key=lambda x: -x["amount"])
+    grand_total = sum(u["amount"] for u in result)
+
+    return {
+        "year_month": year_month,
+        "users": result,
+        "total": grand_total,
+    }
+
+
 @router.get("/reports/user/{user_id}")
 async def user_report(
     user_id: str,
