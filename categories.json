@@ -59,7 +59,7 @@
     "id": "TRANSPORT",
     "label": "교통",
     "icon": "🚌",
-    "description": "버스·지하철",
+    "description": "버스·지하철·항공기",
     "is_meal": false
   },
   {
