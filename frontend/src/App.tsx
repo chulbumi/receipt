@@ -10,6 +10,7 @@ import LoginPage from './auth/LoginPage';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const ReceiptCapturePage = lazy(() => import('./pages/ReceiptCapturePage'));
 const ReceiptReviewPage = lazy(() => import('./pages/ReceiptReviewPage'));
+const ManualEntryPage = lazy(() => import('./pages/ManualEntryPage'));
 const RecordListPage = lazy(() => import('./pages/RecordListPage'));
 const RecordDetailPage = lazy(() => import('./pages/RecordDetailPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
@@ -38,6 +39,7 @@ const App: React.FC = () => (
               <Route path="/" element={<HomePage />} />
               <Route path="/capture" element={<ReceiptCapturePage />} />
               <Route path="/receipt-review" element={<ReceiptReviewPage />} />
+              <Route path="/receipt-manual" element={<ManualEntryPage />} />
               <Route path="/records" element={<RecordListPage />} />
               <Route path="/records/:id" element={<RecordDetailPage />} />
               <Route path="/calendar" element={<CalendarPage />} />

@@ -3,7 +3,7 @@ import {
   Box, Card, CardContent, TextField, Typography, Button,
   Chip, Select, MenuItem, FormControl, InputLabel,
   List, ListItem, ListItemText, ListItemAvatar, ListItemSecondaryAction,
-  IconButton, Divider, Avatar, Checkbox, FormControlLabel,
+  IconButton, Divider, Avatar, Checkbox,
   CircularProgress, Alert, Tooltip,
 } from '@mui/material';
 import { Save, Star, StarBorder } from '@mui/icons-material';
@@ -14,6 +14,7 @@ import { usersApi, recordsApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
+const MEAL_CATEGORIES: Category[] = ['LUNCH', 'DINNER', 'ENTERTAINMENT'];
 
 interface UserItem {
   user_id: string;
@@ -31,10 +32,12 @@ const ReceiptReviewPage: React.FC = () => {
     image_url: string;
     extracted: ExtractedReceipt;
   } | undefined;
+  const presetCategory = location.state?.presetCategory as Category | undefined;
 
   const ext = analyzed?.extracted;
 
-  const [category, setCategory] = useState<Category>('LUNCH');
+  const [category, setCategory] = useState<Category>(presetCategory || 'LUNCH');
+  const isMealCategory = MEAL_CATEGORIES.includes(category);
   const [storeName, setStoreName] = useState(ext?.store_name || '');
   const [approvalNumber, setApprovalNumber] = useState(ext?.approval_number || '');
   const [totalAmount, setTotalAmount] = useState(ext?.total_amount?.toString() || '');
@@ -119,14 +122,12 @@ const ReceiptReviewPage: React.FC = () => {
     setSaving(true);
     setError('');
 
-    const participants = selectedParticipants.map((uid) => {
-      const u = allUsers.find((u) => u.user_id === uid);
-      return {
-        user_id: uid,
-        name: u?.name || uid,
-        amount: amounts[uid] || 0,
-      };
-    });
+    const participants = isMealCategory
+      ? selectedParticipants.map((uid) => {
+          const u = allUsers.find((u) => u.user_id === uid);
+          return { user_id: uid, name: u?.name || uid, amount: amounts[uid] || 0 };
+        })
+      : [];
 
     try {
       await recordsApi.create({
@@ -192,7 +193,25 @@ const ReceiptReviewPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* 참여자 선택 — 별표 UI */}
+        {/* AI 인식 유형 뱃지 */}
+        {ext?.receipt_type && ext.receipt_type !== 'UNKNOWN' && (
+          <Box sx={{ mb: 1.5 }}>
+            <Chip
+              size="small"
+              label={{
+                RECEIPT: '📄 종이 영수증',
+                KIOSK: '🖥️ 키오스크 화면',
+                TABLET: '📱 태블릿 주문',
+                SCREEN: '🖥️ 결제 화면',
+              }[ext.receipt_type] || ext.receipt_type}
+              color="info"
+              variant="outlined"
+            />
+          </Box>
+        )}
+
+        {/* 참여자 선택 — 식사 카테고리만 표시 */}
+        {isMealCategory && (
         <Card sx={{ mb: 2 }}>
           <CardContent sx={{ pb: 1 }}>
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
@@ -337,9 +356,10 @@ const ReceiptReviewPage: React.FC = () => {
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* 금액 분배 */}
-        {selectedParticipants.length > 1 && (
+        {isMealCategory && selectedParticipants.length > 1 && (
           <Card sx={{ mb: 2 }}>
             <CardContent>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>

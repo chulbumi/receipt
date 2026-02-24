@@ -89,6 +89,7 @@ export interface ExtractedReceipt {
   total_amount: number | null;
   transaction_date: string | null;
   card_last4: string | null;
+  receipt_type?: 'RECEIPT' | 'KIOSK' | 'TABLET' | 'SCREEN' | 'UNKNOWN';
   order_details: OrderDetail[];
   error?: string;
 }
