@@ -1,0 +1,79 @@
+[
+  {
+    "id": "LUNCH",
+    "label": "중식",
+    "icon": "🍱",
+    "description": "점심 식사",
+    "is_meal": true
+  },
+  {
+    "id": "DINNER",
+    "label": "석식",
+    "icon": "🍽️",
+    "description": "저녁 식사",
+    "is_meal": true
+  },
+  {
+    "id": "BEVERAGE",
+    "label": "음료",
+    "icon": "☕",
+    "description": "커피·음료",
+    "is_meal": false
+  },
+  {
+    "id": "ENTERTAINMENT",
+    "label": "접대비",
+    "icon": "🤝",
+    "description": "거래처 접대",
+    "is_meal": true
+  },
+  {
+    "id": "FUEL",
+    "label": "주유비",
+    "icon": "⛽",
+    "description": "주유·충전",
+    "is_meal": false
+  },
+  {
+    "id": "PURCHASE",
+    "label": "구매",
+    "icon": "🛒",
+    "description": "물품 구매",
+    "is_meal": false
+  },
+  {
+    "id": "TAXI",
+    "label": "택시",
+    "icon": "🚕",
+    "description": "택시·승차",
+    "is_meal": false
+  },
+  {
+    "id": "RAIL",
+    "label": "철도",
+    "icon": "🚆",
+    "description": "기차·KTX",
+    "is_meal": false
+  },
+  {
+    "id": "TRANSPORT",
+    "label": "교통",
+    "icon": "🚌",
+    "description": "버스·지하철",
+    "is_meal": false
+  },
+  {
+    "id": "PARKING",
+    "label": "주차비",
+    "icon": "🅿️",
+    "description": "주차비",
+    "is_meal": false
+  },
+  {
+    "id": "OTHER",
+    "label": "기타",
+    "icon": "📋",
+    "description": "기타",
+    "is_meal": false
+  }
+]

@@ -9,11 +9,11 @@ import {
 import { Save, Star, StarBorder } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { CATEGORY_LABELS, CATEGORY_ICONS, type Category, type ExtractedReceipt } from '../types';
+import type { Category, ExtractedReceipt } from '../types';
 import { usersApi, recordsApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { useCategories } from '../contexts/CategoriesContext';
 
-const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
 const MEAL_CATEGORIES: Category[] = ['LUNCH', 'DINNER', 'ENTERTAINMENT'];
 
 interface UserItem {
@@ -27,6 +27,7 @@ const ReceiptReviewPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user: me } = useAuth();
+  const { categories, labelOf, iconOf } = useCategories();
   const analyzed = location.state?.analyzed as {
     image_key: string;
     image_url: string;
@@ -177,9 +178,9 @@ const ReceiptReviewPage: React.FC = () => {
             <FormControl fullWidth margin="normal">
               <InputLabel>카테고리</InputLabel>
               <Select value={category} onChange={(e) => setCategory(e.target.value as Category)} label="카테고리">
-                {CATEGORIES.map((cat) => (
-                  <MenuItem key={cat} value={cat}>
-                    {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
+                {categories.map((cat) => (
+                  <MenuItem key={cat.id} value={cat.id}>
+                    {cat.icon} {cat.label}
                   </MenuItem>
                 ))}
               </Select>

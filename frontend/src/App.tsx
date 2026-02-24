@@ -5,6 +5,7 @@ import { Box, CircularProgress } from '@mui/material';
 import theme from './theme';
 import { AuthProvider } from './auth/AuthContext';
 import { ProtectedRoute, AdminRoute } from './auth/ProtectedRoute';
+import { CategoriesProvider } from './contexts/CategoriesContext';
 import LoginPage from './auth/LoginPage';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -30,6 +31,7 @@ const App: React.FC = () => (
   <ThemeProvider theme={theme}>
     <CssBaseline />
     <AuthProvider>
+      <CategoriesProvider>
       <BrowserRouter>
         <Suspense fallback={<Loader />}>
           <Routes>
@@ -57,6 +59,7 @@ const App: React.FC = () => (
           </Routes>
         </Suspense>
       </BrowserRouter>
+      </CategoriesProvider>
     </AuthProvider>
   </ThemeProvider>
 );

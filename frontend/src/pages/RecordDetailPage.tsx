@@ -9,13 +9,15 @@ import { Delete, Edit } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { recordsApi } from '../api/client';
-import { CATEGORY_LABELS, CATEGORY_ICONS, type ReceiptRecord } from '../types';
+import type { ReceiptRecord } from '../types';
 import { useAuth } from '../auth/AuthContext';
+import { useCategories } from '../contexts/CategoriesContext';
 
 const RecordDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user: me } = useAuth();
+  const { labelOf, iconOf } = useCategories();
   const [record, setRecord] = useState<ReceiptRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -90,10 +92,10 @@ const RecordDetailPage: React.FC = () => {
         <Card sx={{ mb: 2 }}>
           <CardContent>
             <Box display="flex" alignItems="center" gap={1.5} mb={2}>
-              <Typography fontSize={36}>{CATEGORY_ICONS[record.category]}</Typography>
+              <Typography fontSize={36}>{iconOf(record.category)}</Typography>
               <Box>
-                <Typography variant="h6" fontWeight={700}>{record.store_name || CATEGORY_LABELS[record.category]}</Typography>
-                <Chip label={CATEGORY_LABELS[record.category]} size="small" color="primary" />
+                <Typography variant="h6" fontWeight={700}>{record.store_name || labelOf(record.category)}</Typography>
+                <Chip label={labelOf(record.category)} size="small" color="primary" />
               </Box>
             </Box>
 

@@ -7,14 +7,10 @@ from boto3.dynamodb.conditions import Key, Attr
 from app.auth.dependencies import get_current_user
 from app.db.dynamodb import get_records_table
 from app.receipts.s3_service import get_presigned_url, delete_image_from_s3
+from app.categories import get_valid_category_ids
 from decimal import Decimal
 
 router = APIRouter(prefix="/api/records", tags=["records"])
-
-CATEGORIES = [
-    "LUNCH", "DINNER", "BEVERAGE", "ENTERTAINMENT",
-    "PARKING", "TAXI", "RAIL", "TRANSPORT", "PURCHASE", "OTHER"
-]
 
 
 class Participant(BaseModel):
@@ -63,8 +59,9 @@ def to_decimal(val):
 
 @router.post("", status_code=201)
 async def create_record(req: CreateRecordRequest, current_user: dict = Depends(get_current_user)):
-    if req.category not in CATEGORIES:
-        raise HTTPException(status_code=400, detail=f"유효하지 않은 카테고리입니다. 허용: {CATEGORIES}")
+    valid_categories = get_valid_category_ids()
+    if req.category not in valid_categories:
+        raise HTTPException(status_code=400, detail=f"유효하지 않은 카테고리입니다. 허용: {valid_categories}")
 
     record_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()

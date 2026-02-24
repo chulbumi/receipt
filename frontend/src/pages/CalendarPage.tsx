@@ -9,7 +9,8 @@ import { ko } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { recordsApi } from '../api/client';
-import { CATEGORY_LABELS, CATEGORY_ICONS, type ReceiptRecord } from '../types';
+import type { ReceiptRecord } from '../types';
+import { useCategories } from '../contexts/CategoriesContext';
 
 interface DayData {
   date: string;
@@ -20,6 +21,7 @@ interface DayData {
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 const CalendarPage: React.FC = () => {
+  const { labelOf, iconOf } = useCategories();
   const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calData, setCalData] = useState<DayData[]>([]);
@@ -176,10 +178,10 @@ const CalendarPage: React.FC = () => {
                     >
                       <Box display="flex" justifyContent="space-between" alignItems="center">
                         <Box display="flex" alignItems="center" gap={1}>
-                          <Typography fontSize={20}>{CATEGORY_ICONS[rec.category]}</Typography>
+                          <Typography fontSize={20}>{iconOf(rec.category)}</Typography>
                           <Box>
                             <Typography variant="body2" fontWeight={600}>
-                              {rec.store_name || CATEGORY_LABELS[rec.category]}
+                              {rec.store_name || labelOf(rec.category)}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
                               {rec.transaction_date?.slice(11, 16)}

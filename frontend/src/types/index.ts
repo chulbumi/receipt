@@ -26,35 +26,27 @@ export interface OrderDetail {
   price: number;
 }
 
-export type Category =
-  | 'LUNCH' | 'DINNER' | 'BEVERAGE' | 'ENTERTAINMENT'
-  | 'PARKING' | 'TAXI' | 'RAIL' | 'TRANSPORT' | 'PURCHASE' | 'OTHER';
+// Category는 string으로 확장 — categories.json에 의해 동적으로 결정됨
+export type Category = string;
 
-export const CATEGORY_LABELS: { [key in Category]: string } = {
-  LUNCH: '중식',
-  DINNER: '석식',
-  BEVERAGE: '음료',
-  ENTERTAINMENT: '접대비',
-  PARKING: '주차비',
-  TAXI: '택시',
-  RAIL: '철도',
-  TRANSPORT: '교통',
-  PURCHASE: '구매',
-  OTHER: '기타',
-};
+export interface CategoryDef {
+  id: string;
+  label: string;
+  icon: string;
+  description: string;
+  is_meal: boolean;
+}
 
-export const CATEGORY_ICONS: { [key in Category]: string } = {
-  LUNCH: '🍱',
-  DINNER: '🍽️',
-  BEVERAGE: '☕',
-  ENTERTAINMENT: '🤝',
-  PARKING: '🅿️',
-  TAXI: '🚕',
-  RAIL: '🚆',
-  TRANSPORT: '🚌',
-  PURCHASE: '🛒',
-  OTHER: '📋',
-};
+// 하위 호환성: 동적 카테고리 배열에서 레거시 맵 형태로 변환하는 헬퍼
+export function buildCategoryMaps(cats: CategoryDef[]) {
+  const labels: Record<string, string> = {};
+  const icons: Record<string, string> = {};
+  cats.forEach((c) => {
+    labels[c.id] = c.label;
+    icons[c.id] = c.icon;
+  });
+  return { labels, icons };
+}
 
 export interface ReceiptRecord {
   record_id: string;

@@ -8,26 +8,14 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import PinchZoomCamera from '../components/PinchZoomCamera';
 import { receiptsApi } from '../api/client';
-import { CATEGORY_LABELS, CATEGORY_ICONS, type Category } from '../types';
-
-// 용도 선택 그룹: 자주 쓰는 순서로 배치
-const CATEGORY_GROUPS: { category: Category; description: string }[] = [
-  { category: 'LUNCH',         description: '점심 식사' },
-  { category: 'DINNER',        description: '저녁 식사' },
-  { category: 'BEVERAGE',      description: '커피·음료' },
-  { category: 'ENTERTAINMENT', description: '거래처 접대' },
-  { category: 'PURCHASE',      description: '물품 구매' },
-  { category: 'TAXI',          description: '택시·승차' },
-  { category: 'RAIL',          description: '기차·KTX' },
-  { category: 'TRANSPORT',     description: '버스·지하철' },
-  { category: 'PARKING',       description: '주차비' },
-  { category: 'OTHER',         description: '기타' },
-];
+import type { Category } from '../types';
+import { useCategories } from '../contexts/CategoriesContext';
 
 type Step = 'category' | 'method';
 
 const ReceiptCapturePage: React.FC = () => {
   const navigate = useNavigate();
+  const { categories, labelOf, iconOf } = useCategories();
   const [step, setStep] = useState<Step>('category');
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [showCamera, setShowCamera] = useState(false);
@@ -95,8 +83,8 @@ const ReceiptCapturePage: React.FC = () => {
           </Typography>
 
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-            {CATEGORY_GROUPS.map(({ category, description }) => (
-              <Box key={category} sx={{ width: 'calc(50% - 6px)' }}>
+            {categories.map((cat) => (
+              <Box key={cat.id} sx={{ width: 'calc(50% - 6px)' }}>
                 <Card
                   variant="outlined"
                   sx={{
@@ -105,16 +93,16 @@ const ReceiptCapturePage: React.FC = () => {
                     '&:hover': { borderColor: 'primary.main', boxShadow: 2 },
                   }}
                 >
-                  <CardActionArea onClick={() => handleSelectCategory(category)} sx={{ p: 0 }}>
+                  <CardActionArea onClick={() => handleSelectCategory(cat.id as Category)} sx={{ p: 0 }}>
                     <CardContent sx={{ textAlign: 'center', py: 2.5, px: 1 }}>
                       <Typography variant="h4" sx={{ mb: 0.5 }}>
-                        {CATEGORY_ICONS[category]}
+                        {cat.icon}
                       </Typography>
                       <Typography variant="body2" fontWeight={700}>
-                        {CATEGORY_LABELS[category]}
+                        {cat.label}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {description}
+                        {cat.description}
                       </Typography>
                     </CardContent>
                   </CardActionArea>
@@ -135,11 +123,11 @@ const ReceiptCapturePage: React.FC = () => {
         <Box
           sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3, p: 2, bgcolor: 'primary.50', borderRadius: 2, border: '1px solid', borderColor: 'primary.200' }}
         >
-          <Typography variant="h4">{selectedCategory && CATEGORY_ICONS[selectedCategory]}</Typography>
+          <Typography variant="h4">{selectedCategory && iconOf(selectedCategory)}</Typography>
           <Box>
             <Typography variant="caption" color="text.secondary">선택된 용도</Typography>
             <Typography variant="subtitle1" fontWeight={700}>
-              {selectedCategory && CATEGORY_LABELS[selectedCategory]}
+              {selectedCategory && labelOf(selectedCategory)}
             </Typography>
           </Box>
           <Button

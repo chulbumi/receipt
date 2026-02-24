@@ -9,6 +9,7 @@ from app.receipts.router import router as receipts_router
 from app.records.router import router as records_router
 from app.cards.router import router as cards_router
 from app.admin.router import router as admin_router
+from app.categories import load_categories
 
 app = FastAPI(
     title="영수증 관리 시스템 API",
@@ -37,6 +38,12 @@ app.include_router(admin_router)
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "receipt-manager"}
+
+
+@app.get("/api/categories")
+async def get_categories():
+    """categories.json 기반 카테고리 목록 반환 (인증 불필요)"""
+    return {"categories": load_categories()}
 
 
 # Lambda 핸들러 (Mangum)

@@ -8,10 +8,11 @@ import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import { adminApi } from '../../api/client';
-import { CATEGORY_LABELS, CATEGORY_ICONS, type Category } from '../../types';
+import { useCategories } from '../../contexts/CategoriesContext';
 
 const AdminRecords: React.FC = () => {
   const navigate = useNavigate();
+  const { categories, labelOf } = useCategories();
   const [ym, setYm] = useState(format(new Date(), 'yyyy-MM'));
   const [category, setCategory] = useState('');
   const [records, setRecords] = useState<any[]>([]);
@@ -48,8 +49,8 @@ const AdminRecords: React.FC = () => {
             <InputLabel>카테고리</InputLabel>
             <Select value={category} onChange={(e) => setCategory(e.target.value)} label="카테고리">
               <MenuItem value="">전체</MenuItem>
-              {(Object.keys(CATEGORY_LABELS) as Category[]).map((cat) => (
-                <MenuItem key={cat} value={cat}>{CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}</MenuItem>
+              {categories.map((cat) => (
+                <MenuItem key={cat.id} value={cat.id}>{cat.icon} {cat.label}</MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -96,7 +97,7 @@ const AdminRecords: React.FC = () => {
                   <TableCell sx={{ fontSize: '0.75rem' }}>{rec.registered_by_name}</TableCell>
                   <TableCell sx={{ fontSize: '0.75rem' }}>{rec.store_name || '-'}</TableCell>
                   <TableCell>
-                    <Chip label={CATEGORY_LABELS[rec.category as Category] || rec.category} size="small" sx={{ fontSize: '0.65rem' }} />
+                    <Chip label={labelOf(rec.category)} size="small" sx={{ fontSize: '0.65rem' }} />
                   </TableCell>
                   <TableCell align="right" sx={{ fontSize: '0.8rem', fontWeight: 600 }}>
                     ₩{rec.total_amount?.toLocaleString()}

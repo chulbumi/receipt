@@ -9,12 +9,12 @@ import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import Layout from '../components/Layout';
 import { recordsApi } from '../api/client';
-import { CATEGORY_LABELS, CATEGORY_ICONS, type ReceiptRecord, type Category } from '../types';
-
-const CATEGORIES = ['', ...Object.keys(CATEGORY_LABELS)] as ('' | Category)[];
+import type { ReceiptRecord, Category } from '../types';
+import { useCategories } from '../contexts/CategoriesContext';
 
 const RecordListPage: React.FC = () => {
   const navigate = useNavigate();
+  const { categories, labelOf, iconOf } = useCategories();
   const [records, setRecords] = useState<ReceiptRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,9 +59,9 @@ const RecordListPage: React.FC = () => {
             <InputLabel>카테고리</InputLabel>
             <Select value={category} onChange={(e) => setCategory(e.target.value as '' | Category)} label="카테고리">
               <MenuItem value="">전체</MenuItem>
-              {(Object.keys(CATEGORY_LABELS) as Category[]).map((cat) => (
-                <MenuItem key={cat} value={cat}>
-                  {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
+              {categories.map((cat) => (
+                <MenuItem key={cat.id} value={cat.id}>
+                  {cat.icon} {cat.label}
                 </MenuItem>
               ))}
             </Select>
@@ -102,10 +102,10 @@ const RecordListPage: React.FC = () => {
                 >
                   <Box display="flex" justifyContent="space-between" alignItems="center">
                     <Box display="flex" alignItems="center" gap={1.5}>
-                      <Typography fontSize={24}>{CATEGORY_ICONS[rec.category]}</Typography>
+                      <Typography fontSize={24}>{iconOf(rec.category)}</Typography>
                       <Box>
                         <Typography variant="body2" fontWeight={600}>
-                          {rec.store_name || CATEGORY_LABELS[rec.category]}
+                          {rec.store_name || labelOf(rec.category)}
                         </Typography>
                         <Box display="flex" gap={0.5} alignItems="center" mt={0.3}>
                           <Typography variant="caption" color="text.secondary">
@@ -122,7 +122,7 @@ const RecordListPage: React.FC = () => {
                         ₩{rec.total_amount?.toLocaleString()}
                       </Typography>
                       <Chip
-                        label={CATEGORY_LABELS[rec.category]}
+                        label={labelOf(rec.category)}
                         size="small"
                         sx={{ fontSize: '0.6rem', height: 18, mt: 0.3 }}
                       />

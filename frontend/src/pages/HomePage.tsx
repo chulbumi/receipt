@@ -13,11 +13,13 @@ import { ko } from 'date-fns/locale';
 import Layout from '../components/Layout';
 import { useAuth } from '../auth/AuthContext';
 import { recordsApi } from '../api/client';
-import { CATEGORY_LABELS, CATEGORY_ICONS, type ReceiptRecord } from '../types';
+import type { ReceiptRecord } from '../types';
+import { useCategories } from '../contexts/CategoriesContext';
 
 const HomePage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { labelOf, iconOf } = useCategories();
   const [monthlyTotal, setMonthlyTotal] = useState<number | null>(null);
   const [recentRecords, setRecentRecords] = useState<ReceiptRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,11 +143,11 @@ const HomePage: React.FC = () => {
                   <Box display="flex" justifyContent="space-between" alignItems="center">
                     <Box display="flex" alignItems="center" gap={1}>
                       <Typography fontSize={20}>
-                        {CATEGORY_ICONS[rec.category]}
+                        {iconOf(rec.category)}
                       </Typography>
                       <Box>
                         <Typography variant="body2" fontWeight={600}>
-                          {rec.store_name || CATEGORY_LABELS[rec.category]}
+                          {rec.store_name || labelOf(rec.category)}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                           {rec.transaction_date?.slice(0, 10)}
@@ -157,7 +159,7 @@ const HomePage: React.FC = () => {
                         ₩{rec.total_amount.toLocaleString()}
                       </Typography>
                       <Chip
-                        label={CATEGORY_LABELS[rec.category]}
+                        label={labelOf(rec.category)}
                         size="small"
                         sx={{ fontSize: '0.6rem', height: 18 }}
                       />
