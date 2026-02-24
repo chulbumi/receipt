@@ -2,20 +2,15 @@ import React, { useEffect, useState } from 'react';
 import {
   Box, Card, CardContent, Typography, LinearProgress,
   Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, IconButton, Fab, Alert, CircularProgress,
+  TextField, IconButton, Fab, Alert, CircularProgress, Chip, Tooltip,
 } from '@mui/material';
-import { Add, Delete, CreditCard } from '@mui/icons-material';
+import { Add, Delete, CreditCard, Star, StarBorder } from '@mui/icons-material';
 import { format } from 'date-fns';
 import Layout from '../components/Layout';
 import { cardsApi } from '../api/client';
 import { type Card as CardType } from '../types';
 
-interface CardSummary {
-  card_id: string;
-  user_id: string;
-  card_name: string;
-  card_last4: string;
-  monthly_limit: number;
+interface CardSummary extends CardType {
   used_amount?: number;
   remaining?: number;
 }
@@ -27,7 +22,9 @@ const CardStatusPage: React.FC = () => {
   const [cardName, setCardName] = useState('');
   const [cardLast4, setCardLast4] = useState('');
   const [monthlyLimit, setMonthlyLimit] = useState('');
+  const [isPrimary, setIsPrimary] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [settingPrimary, setSettingPrimary] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const ym = format(new Date(), 'yyyy-MM');
@@ -37,6 +34,8 @@ const CardStatusPage: React.FC = () => {
     try {
       const res = await cardsApi.list();
       const cardList: CardType[] = res.data.cards;
+      // 주 카드 우선 정렬
+      cardList.sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
       const summaries = await Promise.all(
         cardList.map(async (card) => {
           try {
@@ -66,12 +65,10 @@ const CardStatusPage: React.FC = () => {
         card_name: cardName,
         card_last4: cardLast4,
         monthly_limit: parseFloat(monthlyLimit) || 0,
+        is_primary: isPrimary,
       });
       setAddDialog(false);
-      setCardName('');
-      setCardLast4('');
-      setMonthlyLimit('');
-      setError('');
+      setCardName(''); setCardLast4(''); setMonthlyLimit(''); setIsPrimary(false); setError('');
       loadCards();
     } catch {
       setError('카드 등록에 실패했습니다.');
@@ -84,6 +81,16 @@ const CardStatusPage: React.FC = () => {
     if (!window.confirm('카드를 삭제하시겠습니까?')) return;
     await cardsApi.delete(cardId);
     loadCards();
+  };
+
+  const handleSetPrimary = async (cardId: string) => {
+    setSettingPrimary(cardId);
+    try {
+      await cardsApi.setPrimary(cardId);
+      loadCards();
+    } finally {
+      setSettingPrimary(null);
+    }
   };
 
   return (
@@ -112,19 +119,43 @@ const CardStatusPage: React.FC = () => {
             const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
 
             return (
-              <Card key={card.card_id} sx={{ mb: 2 }}>
+              <Card key={card.card_id} sx={{ mb: 2, border: card.is_primary ? '2px solid' : '1px solid', borderColor: card.is_primary ? 'primary.main' : 'divider' }}>
                 <CardContent>
                   <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1.5}>
                     <Box display="flex" alignItems="center" gap={1}>
-                      <CreditCard color="primary" />
+                      <CreditCard color={card.is_primary ? 'primary' : 'action'} />
                       <Box>
-                        <Typography variant="subtitle1" fontWeight={600}>{card.card_name}</Typography>
+                        <Box display="flex" alignItems="center" gap={0.8}>
+                          <Typography variant="subtitle1" fontWeight={600}>{card.card_name}</Typography>
+                          {card.is_primary && (
+                            <Chip label="주 카드" size="small" color="primary" sx={{ height: 18, fontSize: '0.65rem' }} />
+                          )}
+                        </Box>
                         <Typography variant="caption" color="text.secondary">****{card.card_last4}</Typography>
                       </Box>
                     </Box>
-                    <IconButton size="small" color="error" onClick={() => handleDelete(card.card_id)}>
-                      <Delete fontSize="small" />
-                    </IconButton>
+                    <Box display="flex" alignItems="center" gap={0.5}>
+                      {!card.is_primary && (
+                        <Tooltip title="주 사용 카드로 설정">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleSetPrimary(card.card_id)}
+                            disabled={settingPrimary === card.card_id}
+                          >
+                            {settingPrimary === card.card_id
+                              ? <CircularProgress size={16} />
+                              : <StarBorder fontSize="small" />
+                            }
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {card.is_primary && (
+                        <Star sx={{ fontSize: 20, color: 'warning.main', mr: 0.5 }} />
+                      )}
+                      <IconButton size="small" color="error" onClick={() => handleDelete(card.card_id)}>
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </Box>
                   </Box>
 
                   <Box display="flex" justifyContent="space-between" mb={1}>
@@ -172,9 +203,19 @@ const CardStatusPage: React.FC = () => {
           <DialogTitle>법인카드 등록</DialogTitle>
           <DialogContent>
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-            <TextField label="카드 별칭" value={cardName} onChange={(e) => setCardName(e.target.value)} fullWidth margin="normal" />
+            <TextField label="카드 별칭" value={cardName} onChange={(e) => setCardName(e.target.value)} fullWidth margin="normal" placeholder="예: 신한법인카드" />
             <TextField label="카드 뒷 4자리" value={cardLast4} onChange={(e) => setCardLast4(e.target.value)} fullWidth margin="normal" inputProps={{ maxLength: 4 }} />
             <TextField label="월 한도 (원, 없으면 0)" value={monthlyLimit} onChange={(e) => setMonthlyLimit(e.target.value)} type="number" fullWidth margin="normal" />
+            <Box
+              sx={{ mt: 1, p: 1.5, border: '1px solid', borderColor: isPrimary ? 'primary.main' : 'divider', borderRadius: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 1 }}
+              onClick={() => setIsPrimary((v) => !v)}
+            >
+              {isPrimary ? <Star sx={{ color: 'warning.main' }} /> : <StarBorder color="action" />}
+              <Box>
+                <Typography variant="body2" fontWeight={600}>주 사용 카드로 설정</Typography>
+                <Typography variant="caption" color="text.secondary">영수증 등록 시 이 카드가 자동 선택됩니다</Typography>
+              </Box>
+            </Box>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setAddDialog(false)}>취소</Button>

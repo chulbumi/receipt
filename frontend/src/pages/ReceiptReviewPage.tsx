@@ -13,6 +13,7 @@ import type { Category, ExtractedReceipt } from '../types';
 import { usersApi, recordsApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useCategories } from '../contexts/CategoriesContext';
+import CardSelector from '../components/CardSelector';
 
 const MEAL_CATEGORIES: Category[] = ['LUNCH', 'DINNER', 'ENTERTAINMENT'];
 
@@ -189,7 +190,7 @@ const ReceiptReviewPage: React.FC = () => {
             <TextField label="결제금액 (원)" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} type="number" fullWidth margin="normal" />
             <TextField label="사용일시 (YYYY-MM-DD HH:mm)" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} fullWidth margin="normal" />
             <TextField label="승인번호" value={approvalNumber} onChange={(e) => setApprovalNumber(e.target.value)} fullWidth margin="normal" />
-            <TextField label="카드 뒷 4자리" value={cardLast4} onChange={(e) => setCardLast4(e.target.value)} fullWidth margin="normal" inputProps={{ maxLength: 4 }} />
+            <CardSelector value={cardLast4} onChange={setCardLast4} extractedLast4={ext?.card_last4} />
             <TextField label="메모" value={memo} onChange={(e) => setMemo(e.target.value)} fullWidth margin="normal" multiline rows={2} />
           </CardContent>
         </Card>

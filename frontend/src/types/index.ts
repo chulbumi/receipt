@@ -73,6 +73,7 @@ export interface Card {
   card_name: string;
   card_last4: string;
   monthly_limit: number;
+  is_primary?: boolean;
 }
 
 export interface ExtractedReceipt {

@@ -94,6 +94,7 @@ export const cardsApi = {
   create: (data: object) => apiClient.post('/api/cards', data),
   update: (id: string, data: object) => apiClient.put(`/api/cards/${id}`, data),
   delete: (id: string) => apiClient.delete(`/api/cards/${id}`),
+  setPrimary: (id: string) => apiClient.post(`/api/cards/${id}/set-primary`),
   getSummary: (id: string, year_month: string) =>
     apiClient.get(`/api/cards/${id}/summary`, { params: { year_month } }),
 };

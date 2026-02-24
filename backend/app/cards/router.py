@@ -15,12 +15,14 @@ class CreateCardRequest(BaseModel):
     card_name: str
     card_last4: str
     monthly_limit: float = 0
+    is_primary: bool = False
 
 
 class UpdateCardRequest(BaseModel):
     card_name: Optional[str] = None
     card_last4: Optional[str] = None
     monthly_limit: Optional[float] = None
+    is_primary: Optional[bool] = None
 
 
 @router.get("")
@@ -36,17 +38,37 @@ async def get_my_cards(current_user: dict = Depends(get_current_user)):
     return {"cards": cards}
 
 
+def _clear_primary(table, user_id: str):
+    """해당 사용자의 모든 카드에서 is_primary 해제"""
+    resp = table.query(
+        IndexName="user_id-index",
+        KeyConditionExpression=Key("user_id").eq(user_id),
+    )
+    for card in resp.get("Items", []):
+        if card.get("is_primary"):
+            table.update_item(
+                Key={"card_id": card["card_id"]},
+                UpdateExpression="SET is_primary = :f",
+                ExpressionAttributeValues={":f": False},
+            )
+
+
 @router.post("", status_code=201)
 async def create_card(req: CreateCardRequest, current_user: dict = Depends(get_current_user)):
     table = get_cards_table()
     card_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+
+    if req.is_primary:
+        _clear_primary(table, current_user["user_id"])
+
     item = {
         "card_id": card_id,
         "user_id": current_user["user_id"],
         "card_name": req.card_name,
         "card_last4": req.card_last4,
         "monthly_limit": Decimal(str(req.monthly_limit)),
+        "is_primary": req.is_primary,
         "created_at": now,
     }
     table.put_item(Item=item)
@@ -74,6 +96,10 @@ async def update_card(
         updates["card_last4"] = req.card_last4
     if req.monthly_limit is not None:
         updates["monthly_limit"] = Decimal(str(req.monthly_limit))
+    if req.is_primary is not None:
+        if req.is_primary:
+            _clear_primary(table, current_user["user_id"])
+        updates["is_primary"] = req.is_primary
 
     if updates:
         expr = "SET " + ", ".join(f"#{k} = :{k}" for k in updates)
@@ -84,6 +110,22 @@ async def update_card(
             ExpressionAttributeValues={f":{k}": v for k, v in updates.items()},
         )
     return {"message": "카드 정보가 수정되었습니다."}
+
+
+@router.post("/{card_id}/set-primary")
+async def set_primary_card(card_id: str, current_user: dict = Depends(get_current_user)):
+    table = get_cards_table()
+    resp = table.get_item(Key={"card_id": card_id})
+    card = resp.get("Item")
+    if not card or card["user_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=404, detail="카드를 찾을 수 없습니다.")
+    _clear_primary(table, current_user["user_id"])
+    table.update_item(
+        Key={"card_id": card_id},
+        UpdateExpression="SET is_primary = :t",
+        ExpressionAttributeValues={":t": True},
+    )
+    return {"message": "주 사용 카드로 설정되었습니다."}
 
 
 @router.delete("/{card_id}")

@@ -13,6 +13,7 @@ import type { Category } from '../types';
 import { usersApi, recordsApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useCategories } from '../contexts/CategoriesContext';
+import CardSelector from '../components/CardSelector';
 
 const MEAL_CATEGORIES: Category[] = ['LUNCH', 'DINNER', 'ENTERTAINMENT'];
 
@@ -221,13 +222,7 @@ const ManualEntryPage: React.FC = () => {
               fullWidth margin="normal"
               placeholder="카드 승인번호 (없으면 생략)"
             />
-            <TextField
-              label="카드 뒷 4자리"
-              value={cardLast4}
-              onChange={(e) => setCardLast4(e.target.value)}
-              fullWidth margin="normal"
-              inputProps={{ maxLength: 4 }}
-            />
+            <CardSelector value={cardLast4} onChange={setCardLast4} />
             <TextField
               label="메모"
               value={memo}
