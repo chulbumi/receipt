@@ -1,5 +1,12 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+KST = timezone(timedelta(hours=9))
+
+
+def now_kst_str() -> str:
+    """현재 KST 시각을 'YYYY-MM-DD HH:MM' 형식으로 반환"""
+    return datetime.now(KST).strftime("%Y-%m-%d %H:%M")
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -66,8 +73,9 @@ async def create_record(req: CreateRecordRequest, current_user: dict = Depends(g
     record_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
 
+    transaction_date = req.transaction_date or now_kst_str()
     try:
-        dt = datetime.strptime(req.transaction_date[:16], "%Y-%m-%d %H:%M")
+        dt = datetime.strptime(transaction_date[:16], "%Y-%m-%d %H:%M")
     except ValueError:
         raise HTTPException(status_code=400, detail="transaction_date 형식: YYYY-MM-DD HH:MM")
 
@@ -82,7 +90,7 @@ async def create_record(req: CreateRecordRequest, current_user: dict = Depends(g
         "approval_number": req.approval_number,
         "store_name": req.store_name,
         "total_amount": to_decimal(req.total_amount),
-        "transaction_date": req.transaction_date,
+        "transaction_date": transaction_date,
         "order_details": to_decimal([od.model_dump() for od in req.order_details]),
         "image_key": req.image_key,
         "participants": to_decimal([p.model_dump() for p in req.participants]),

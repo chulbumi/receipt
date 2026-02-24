@@ -14,6 +14,7 @@ import { usersApi, recordsApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useCategories } from '../contexts/CategoriesContext';
 import CardSelector from '../components/CardSelector';
+import { nowKST } from '../utils/datetime';
 
 const MEAL_CATEGORIES: Category[] = ['LUNCH', 'DINNER', 'ENTERTAINMENT'];
 
@@ -137,7 +138,7 @@ const ReceiptReviewPage: React.FC = () => {
         approval_number: approvalNumber || null,
         store_name: storeName,
         total_amount: parseFloat(totalAmount),
-        transaction_date: transactionDate || new Date().toISOString().slice(0, 16).replace('T', ' '),
+        transaction_date: transactionDate || nowKST(),
         order_details: ext?.order_details || [],
         image_key: analyzed?.image_key || null,
         participants,
