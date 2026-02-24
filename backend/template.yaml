@@ -1,0 +1,196 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 영수증 관리 시스템 - FastAPI Lambda Backend
+
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 512
+    Runtime: python3.11
+    Environment:
+      Variables:
+        AWS_ACCOUNT_ID: !Ref AWS::AccountId
+        AWS_REGION_NAME: !Ref AWS::Region
+        DYNAMODB_USERS_TABLE: !Ref UsersTable
+        DYNAMODB_RECORDS_TABLE: !Ref RecordsTable
+        DYNAMODB_CARDS_TABLE: !Ref CardsTable
+        S3_IMAGES_BUCKET: !Ref ImagesBucket
+        JWT_SECRET_KEY: !Ref JwtSecretKey
+        JWT_ALGORITHM: HS256
+        JWT_EXPIRATION_HOURS: "24"
+        JWT_REFRESH_EXPIRATION_DAYS: "30"
+        GEMINI_API_KEY: !Ref GeminiApiKey
+        GEMINI_MODEL: gemini-2.0-flash-lite
+
+Parameters:
+  JwtSecretKey:
+    Type: String
+    NoEcho: true
+    Description: JWT Secret Key
+
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    Description: Google Gemini API Key
+
+  AdminPassword:
+    Type: String
+    NoEcho: true
+    Default: "admin1234!"
+    Description: Initial admin password
+
+Resources:
+  # ---- Lambda 함수 ----
+  ReceiptApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: receipt-api
+      CodeUri: ./
+      Handler: app.main.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RecordsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CardsTable
+        - S3CrudPolicy:
+            BucketName: !Ref ImagesBucket
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref ReceiptApi
+        ApiRoot:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+            RestApiId: !Ref ReceiptApi
+
+  # ---- API Gateway ----
+  ReceiptApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: receipt-api
+      StageName: prod
+      Cors:
+        AllowMethods: "'*'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'*'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'*'"
+
+  # ---- DynamoDB 테이블 참조 (이미 생성된 경우 import 또는 ARN 참조) ----
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      TableName: receipt_users
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+
+  RecordsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      TableName: receipt_records
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: record_id
+          AttributeType: S
+        - AttributeName: year_month
+          AttributeType: S
+        - AttributeName: registered_by_date
+          AttributeType: S
+        - AttributeName: registered_by
+          AttributeType: S
+        - AttributeName: transaction_date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: record_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: year_month-registered_by_date-index
+          KeySchema:
+            - AttributeName: year_month
+              KeyType: HASH
+            - AttributeName: registered_by_date
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: registered_by-transaction_date-index
+          KeySchema:
+            - AttributeName: registered_by
+              KeyType: HASH
+            - AttributeName: transaction_date
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  CardsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      TableName: receipt_cards
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: card_id
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: card_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: user_id-index
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  # ---- S3 이미지 버킷 ----
+  ImagesBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub receipt-images-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, PUT, POST, DELETE, HEAD]
+            AllowedOrigins: ['*']
+            MaxAge: 3000
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway URL
+    Value: !Sub https://${ReceiptApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+    Export:
+      Name: ReceiptApiUrl
+
+  LambdaFunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt ReceiptApiFunction.Arn
