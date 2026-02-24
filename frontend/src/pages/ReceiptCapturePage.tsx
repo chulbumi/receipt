@@ -15,7 +15,7 @@ type Step = 'category' | 'method';
 
 const ReceiptCapturePage: React.FC = () => {
   const navigate = useNavigate();
-  const { categories, labelOf, iconOf } = useCategories();
+  const { categories, labelOf } = useCategories();
   const [step, setStep] = useState<Step>('category');
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [showCamera, setShowCamera] = useState(false);
@@ -90,14 +90,11 @@ const ReceiptCapturePage: React.FC = () => {
                   sx={{
                     borderRadius: 2,
                     transition: 'all 0.15s',
-                    '&:hover': { borderColor: 'primary.main', boxShadow: 2 },
+                    '&:hover': { borderColor: 'primary.main', bgcolor: 'primary.50', boxShadow: 1 },
                   }}
                 >
-                  <CardActionArea onClick={() => handleSelectCategory(cat.id as Category)} sx={{ p: 0 }}>
-                    <CardContent sx={{ textAlign: 'center', py: 2.5, px: 1 }}>
-                      <Typography variant="h4" sx={{ mb: 0.5 }}>
-                        {cat.icon}
-                      </Typography>
+                  <CardActionArea onClick={() => handleSelectCategory(cat.id as Category)}>
+                    <CardContent sx={{ py: 1.2, px: 1.5, '&:last-child': { pb: 1.2 } }}>
                       <Typography variant="body2" fontWeight={700}>
                         {cat.label}
                       </Typography>
@@ -123,7 +120,6 @@ const ReceiptCapturePage: React.FC = () => {
         <Box
           sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3, p: 2, bgcolor: 'primary.50', borderRadius: 2, border: '1px solid', borderColor: 'primary.200' }}
         >
-          <Typography variant="h4">{selectedCategory && iconOf(selectedCategory)}</Typography>
           <Box>
             <Typography variant="caption" color="text.secondary">선택된 용도</Typography>
             <Typography variant="subtitle1" fontWeight={700}>
