@@ -9,6 +9,9 @@ from app.receipts.router import router as receipts_router
 from app.records.router import router as records_router
 from app.cards.router import router as cards_router
 from app.admin.router import router as admin_router
+from app.presence.router import router as presence_router
+from app.attendance.router import router as attendance_router
+from app.admin.presence_router import router as admin_presence_router
 from app.categories import load_categories
 
 app = FastAPI(
@@ -33,6 +36,9 @@ app.include_router(receipts_router)
 app.include_router(records_router)
 app.include_router(cards_router)
 app.include_router(admin_router)
+app.include_router(presence_router)
+app.include_router(attendance_router)
+app.include_router(admin_presence_router)
 
 
 @app.get("/api/health")

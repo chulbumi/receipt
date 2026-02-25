@@ -67,6 +67,9 @@
 | DynamoDB | `receipt_users` | 사용자 정보 |
 | DynamoDB | `receipt_records` | 영수증/지출 내역 |
 | DynamoDB | `receipt_cards` | 법인카드 정보 |
+| DynamoDB | `presence_status` | 직원 실시간 재실 상태 (TTL 24h) |
+| DynamoDB | `attendance_logs` | 출퇴근 기록 |
+| DynamoDB | `office_locations` | 사무실 위치/Wi-Fi 설정 |
 | AWS 리전 | `ap-northeast-2` | 서울 |
 
 ---
@@ -88,6 +91,9 @@ S3_FRONTEND_BUCKET=receipt-frontend-493162620368
 DYNAMODB_USERS_TABLE=receipt_users
 DYNAMODB_RECORDS_TABLE=receipt_records
 DYNAMODB_CARDS_TABLE=receipt_cards
+DYNAMODB_PRESENCE_TABLE=presence_status
+DYNAMODB_ATTENDANCE_TABLE=attendance_logs
+DYNAMODB_OFFICES_TABLE=office_locations
 
 # JWT
 JWT_SECRET_KEY=<openssl rand -hex 32 으로 생성>
@@ -253,6 +259,95 @@ Authorization: Bearer <access_token>
 
 ---
 
+### `presence_status` — 실시간 재실 상태 테이블
+
+> **직원 동선 파악 앱용 테이블**
+
+**Primary Key:** `user_id` (String, HASH)
+
+**TTL:** `ttl` 필드 (24시간 미업데이트 시 자동 삭제)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `user_id` | String | PK, `receipt_users`와 동일 |
+| `status` | String | `IN_OFFICE` / `IN_BUILDING` / `OUT_OF_OFFICE` / `ON_LEAVE` / `OFF_DUTY` |
+| `office_id` | String | 현재 위치한 사무실 ID (nullable) |
+| `office_name` | String | 사무실 이름 (비정규화, 조회 편의) |
+| `detection_method` | String | `wifi` / `gps` / `manual` |
+| `manual_note` | String | 수동 설정 시 메모 (예: "오후 반차") |
+| `last_updated` | String | ISO 8601 UTC |
+| `ttl` | Number | Unix timestamp (24시간 후 자동 만료) |
+
+**상태 코드 설명:**
+
+| 상태 | 코드 | 감지 방식 |
+|---|---|---|
+| 사무실 내 | `IN_OFFICE` | Wi-Fi SSID 매칭 |
+| 건물 내 | `IN_BUILDING` | GPS 지오펜스 내 + Wi-Fi 미접속 |
+| 외근 | `OUT_OF_OFFICE` | 지오펜스 외부 또는 수동 설정 |
+| 휴가 | `ON_LEAVE` | 수동 설정만 |
+| 퇴근 | `OFF_DUTY` | 지오펜스 이탈 또는 수동 설정 |
+
+---
+
+### `attendance_logs` — 출퇴근 기록 테이블
+
+**Primary Key:** `user_id` (String, HASH) + `date` (String, RANGE)
+
+**Global Secondary Index:**
+
+| GSI 이름 | PK | SK | 용도 |
+|---|---|---|---|
+| `date-user_id-index` | `date` (S) | `user_id` (S) | 특정 일자 전체 출퇴근 현황 조회 |
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `user_id` | String | PK |
+| `date` | String | `YYYY-MM-DD` (SK) |
+| `check_in` | String | 최초 출근 시각 ISO 8601 KST |
+| `check_out` | String | 마지막 퇴근 시각 ISO 8601 KST |
+| `check_in_method` | String | `wifi` / `gps` / `manual` |
+| `check_out_method` | String | `wifi` / `gps` / `manual` |
+| `office_id` | String | 출근한 사무실 ID |
+| `status_history` | List | `[{status, timestamp, method}]` 당일 상태 변경 이력 |
+| `created_at` | String | ISO 8601 UTC |
+
+---
+
+### `office_locations` — 사무실 위치 테이블
+
+**Primary Key:** `office_id` (String, HASH)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `office_id` | String | PK (예: `HQ`, `BRANCH_GANGNAM`) |
+| `name` | String | 사무실 이름 (예: "본사", "강남지점") |
+| `address` | String | 주소 |
+| `latitude` | Number | 위도 |
+| `longitude` | Number | 경도 |
+| `radius_meters` | Number | 지오펜스 반경 (미터) |
+| `wifi_ssids` | List\<String\> | 해당 사무실 Wi-Fi SSID 목록 |
+| `is_active` | Boolean | 활성 여부 |
+| `created_at` | String | ISO 8601 UTC |
+
+**예시 레코드:**
+
+```json
+{
+  "office_id": "HQ",
+  "name": "본사",
+  "address": "서울시 강남구 테헤란로 123",
+  "latitude": 37.5065,
+  "longitude": 127.0536,
+  "radius_meters": 200,
+  "wifi_ssids": ["COMPANY_5G", "COMPANY_2.4G", "GUEST_WIFI"],
+  "is_active": true,
+  "created_at": "2025-01-01T00:00:00+00:00"
+}
+```
+
+---
+
 ## 6. 전체 API 엔드포인트 목록
 
 **Base URL:** `https://xx72sektvf.execute-api.ap-northeast-2.amazonaws.com/prod`
@@ -295,6 +390,18 @@ Authorization: Bearer <access_token>
 | GET | `/api/admin/reports/monthly` | ✓ | admin | 월별 집계 보고서 |
 | GET | `/api/admin/reports/users-summary` | ✓ | admin | 직원별 식대 집계 |
 | GET | `/api/admin/reports/user/{id}` | ✓ | admin | 특정 사용자 보고서 |
+| PUT | `/api/presence/update` | ✓ | user | 재실 상태 업데이트 (Wi-Fi/GPS) |
+| PUT | `/api/presence/manual` | ✓ | user | 수동 상태 변경 (휴가, 외근 등) |
+| GET | `/api/presence/me` | ✓ | user | 내 현재 상태 조회 |
+| GET | `/api/presence/all` | ✓ | user | 전 직원 현재 상태 일람 |
+| GET | `/api/presence/offices` | ✓ | user | 사무실 목록 (지오펜스/Wi-Fi 설정) |
+| GET | `/api/attendance/me` | ✓ | user | 내 출퇴근 기록 |
+| GET | `/api/attendance/today` | ✓ | user | 오늘 출퇴근 상태 |
+| GET | `/api/admin/presence/dashboard` | ✓ | admin | 전 직원 상태 대시보드 |
+| GET | `/api/admin/presence/attendance` | ✓ | admin | 특정 일자 전체 출퇴근 기록 |
+| POST | `/api/admin/presence/offices` | ✓ | admin | 사무실 등록 |
+| PUT | `/api/admin/presence/offices/{id}` | ✓ | admin | 사무실 정보 수정 |
+| DELETE | `/api/admin/presence/offices/{id}` | ✓ | admin | 사무실 삭제 |
 
 ---
 
@@ -511,6 +618,291 @@ Query: year_month=2025-02
 ```
 
 > `participants` 배열 기준 개인 부담액 집계. participants 없으면 등록자 전액 부담.
+
+---
+
+### 재실 상태 (Presence)
+
+#### `PUT /api/presence/update`
+
+앱에서 주기적으로 호출하여 Wi-Fi/GPS 기반 상태를 업데이트합니다.
+
+```json
+// Request
+{
+  "status": "IN_OFFICE",          // IN_OFFICE | IN_BUILDING | OUT_OF_OFFICE | OFF_DUTY
+  "office_id": "HQ",              // 선택, 사무실 ID
+  "detection_method": "wifi",     // wifi | gps | manual
+  "wifi_ssid": "COMPANY_5G"       // 선택, Wi-Fi SSID (office_id 자동 매칭에 사용)
+}
+
+// Response 200
+{
+  "message": "상태가 업데이트되었습니다.",
+  "presence": {
+    "user_id": "hong123",
+    "status": "IN_OFFICE",
+    "office_id": "HQ",
+    "office_name": "본사",
+    "detection_method": "wifi",
+    "last_updated": "2025-02-25T01:00:00+00:00",
+    "ttl": 1740448800
+  }
+}
+```
+
+> Wi-Fi SSID를 전송하면 `office_locations` 테이블에서 매칭되는 사무실을 자동으로 찾아 `office_id`를 설정합니다.
+
+#### `PUT /api/presence/manual`
+
+사용자가 직접 상태를 변경합니다 (휴가, 외근 등).
+
+```json
+// Request
+{
+  "status": "ON_LEAVE",           // IN_OFFICE | IN_BUILDING | OUT_OF_OFFICE | ON_LEAVE | OFF_DUTY
+  "manual_note": "오후 반차"       // 선택, 메모 (최대 200자)
+}
+
+// Response 200
+{
+  "message": "상태가 업데이트되었습니다.",
+  "presence": {
+    "user_id": "hong123",
+    "status": "ON_LEAVE",
+    "detection_method": "manual",
+    "manual_note": "오후 반차",
+    "last_updated": "2025-02-25T01:00:00+00:00",
+    "ttl": 1740448800
+  }
+}
+```
+
+#### `GET /api/presence/me`
+
+```json
+// Response 200
+{
+  "user_id": "hong123",
+  "name": "홍길동",
+  "department": "영업팀",
+  "status": "IN_OFFICE",
+  "office_id": "HQ",
+  "office_name": "본사",
+  "detection_method": "wifi",
+  "manual_note": null,
+  "last_updated": "2025-02-25T01:00:00+00:00"
+}
+```
+
+#### `GET /api/presence/all`
+
+```json
+// Response 200
+{
+  "users": [
+    {
+      "user_id": "hong123",
+      "name": "홍길동",
+      "department": "영업팀",
+      "status": "IN_OFFICE",
+      "office_id": "HQ",
+      "office_name": "본사",
+      "detection_method": "wifi",
+      "manual_note": null,
+      "last_updated": "2025-02-25T01:00:00+00:00"
+    }
+  ],
+  "count": 1
+}
+```
+
+#### `GET /api/presence/offices`
+
+앱 초기화 시 사무실 목록과 지오펜스/Wi-Fi 설정을 가져옵니다.
+
+```json
+// Response 200
+{
+  "offices": [
+    {
+      "office_id": "HQ",
+      "name": "본사",
+      "address": "서울시 강남구 테헤란로 123",
+      "latitude": "37.5065",
+      "longitude": "127.0536",
+      "radius_meters": 200,
+      "wifi_ssids": ["COMPANY_5G", "COMPANY_2.4G"],
+      "is_active": true
+    }
+  ]
+}
+```
+
+---
+
+### 출퇴근 기록 (Attendance)
+
+#### `GET /api/attendance/me`
+
+```
+Query Parameters:
+  start_date  (선택) YYYY-MM-DD
+  end_date    (선택) YYYY-MM-DD
+  (미지정 시 이번 달 기록 반환)
+
+// Response 200
+{
+  "records": [
+    {
+      "user_id": "hong123",
+      "date": "2025-02-25",
+      "check_in": "2025-02-25T09:01:23+09:00",
+      "check_out": "2025-02-25T18:15:30+09:00",
+      "check_in_method": "wifi",
+      "check_out_method": "gps",
+      "office_id": "HQ",
+      "status_history": [
+        {"status": "IN_OFFICE", "timestamp": "2025-02-25T09:01:23+09:00", "method": "wifi"},
+        {"status": "OUT_OF_OFFICE", "timestamp": "2025-02-25T13:00:00+09:00", "method": "gps"},
+        {"status": "IN_OFFICE", "timestamp": "2025-02-25T14:30:00+09:00", "method": "wifi"},
+        {"status": "OFF_DUTY", "timestamp": "2025-02-25T18:15:30+09:00", "method": "gps"}
+      ]
+    }
+  ],
+  "count": 1
+}
+```
+
+#### `GET /api/attendance/today`
+
+```json
+// Response 200
+{
+  "date": "2025-02-25",
+  "checked_in": true,
+  "check_in": "2025-02-25T09:01:23+09:00",
+  "check_out": null,
+  "check_in_method": "wifi",
+  "check_out_method": null,
+  "office_id": "HQ",
+  "status_history": [
+    {"status": "IN_OFFICE", "timestamp": "2025-02-25T09:01:23+09:00", "method": "wifi"}
+  ]
+}
+```
+
+---
+
+### 관리자 — 재실 상태
+
+#### `GET /api/admin/presence/dashboard`
+
+전 직원 상태를 부서별로 그룹핑하여 반환합니다.
+
+```json
+// Response 200
+{
+  "total_users": 15,
+  "status_summary": {
+    "IN_OFFICE": 8,
+    "IN_BUILDING": 2,
+    "OUT_OF_OFFICE": 1,
+    "ON_LEAVE": 1,
+    "OFF_DUTY": 3
+  },
+  "by_department": {
+    "영업팀": [
+      {
+        "user_id": "hong123",
+        "name": "홍길동",
+        "status": "IN_OFFICE",
+        "office_id": "HQ",
+        "office_name": "본사",
+        "detection_method": "wifi",
+        "manual_note": null,
+        "last_updated": "2025-02-25T01:00:00+00:00"
+      }
+    ],
+    "개발팀": [...]
+  }
+}
+```
+
+#### `GET /api/admin/presence/attendance`
+
+```
+Query Parameters:
+  date  (선택) YYYY-MM-DD (기본: 오늘)
+
+// Response 200
+{
+  "date": "2025-02-25",
+  "checked_in": [
+    {
+      "user_id": "hong123",
+      "name": "홍길동",
+      "department": "영업팀",
+      "check_in": "2025-02-25T09:01:23+09:00",
+      "check_out": null,
+      "check_in_method": "wifi",
+      "office_id": "HQ"
+    }
+  ],
+  "checked_in_count": 12,
+  "absent": [
+    {
+      "user_id": "lee789",
+      "name": "이영희",
+      "department": "인사팀",
+      "check_in": null,
+      "check_out": null
+    }
+  ],
+  "absent_count": 3
+}
+```
+
+#### `POST /api/admin/presence/offices`
+
+```json
+// Request
+{
+  "office_id": "BRANCH_GANGNAM",
+  "name": "강남지점",
+  "address": "서울시 강남구 역삼동 123-4",
+  "latitude": 37.4979,
+  "longitude": 127.0276,
+  "radius_meters": 150,
+  "wifi_ssids": ["GANGNAM_5G", "GANGNAM_2.4G"]
+}
+
+// Response 201
+{ "message": "사무실이 등록되었습니다.", "office_id": "BRANCH_GANGNAM" }
+
+// Response 400: 이미 존재하는 office_id
+```
+
+#### `PUT /api/admin/presence/offices/{office_id}`
+
+```json
+// Request (부분 업데이트 가능)
+{
+  "name": "강남지점 (신사옥)",
+  "wifi_ssids": ["GANGNAM_NEW_5G", "GANGNAM_NEW_2.4G"],
+  "radius_meters": 200
+}
+
+// Response 200
+{ "message": "사무실 정보가 수정되었습니다." }
+```
+
+#### `DELETE /api/admin/presence/offices/{office_id}`
+
+```json
+// Response 200 (soft delete: is_active=false로 변경)
+{ "message": "사무실이 삭제되었습니다." }
+```
 
 ---
 
@@ -748,6 +1140,9 @@ aws lambda update-function-configuration \
     DYNAMODB_USERS_TABLE=receipt_users,
     DYNAMODB_RECORDS_TABLE=receipt_records,
     DYNAMODB_CARDS_TABLE=receipt_cards,
+    DYNAMODB_PRESENCE_TABLE=presence_status,
+    DYNAMODB_ATTENDANCE_TABLE=attendance_logs,
+    DYNAMODB_OFFICES_TABLE=office_locations,
     S3_IMAGES_BUCKET=receipt-images-493162620368,
     AWS_REGION=ap-northeast-2
   }"
