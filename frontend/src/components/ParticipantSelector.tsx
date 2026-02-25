@@ -5,7 +5,6 @@ import {
   Button,
 } from '@mui/material';
 import { PeopleAlt } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
 interface UserItem {
@@ -19,15 +18,16 @@ interface ParticipantSelectorProps {
   allUsers: UserItem[];
   selectedParticipants: string[];
   onToggle: (uid: string) => void;
+  onManageFavorites: () => void;
 }
 
 const ParticipantSelector: React.FC<ParticipantSelectorProps> = ({
   allUsers,
   selectedParticipants,
   onToggle,
+  onManageFavorites,
 }) => {
   const { user: me } = useAuth();
-  const navigate = useNavigate();
 
   const favoriteUsers = allUsers.filter(
     (u) => u.is_favorite && u.user_id !== me?.user_id
@@ -43,7 +43,7 @@ const ParticipantSelector: React.FC<ParticipantSelectorProps> = ({
           <Button
             size="small"
             startIcon={<PeopleAlt fontSize="small" />}
-            onClick={() => navigate('/more', { state: { openFavorites: true } })}
+            onClick={onManageFavorites}
             sx={{ fontSize: '0.75rem' }}
           >
             즐겨찾기 관리
@@ -114,7 +114,7 @@ const ParticipantSelector: React.FC<ParticipantSelectorProps> = ({
               size="small"
               variant="outlined"
               startIcon={<PeopleAlt fontSize="small" />}
-              onClick={() => navigate('/more', { state: { openFavorites: true } })}
+              onClick={onManageFavorites}
             >
               즐겨찾기 추가하러 가기
             </Button>

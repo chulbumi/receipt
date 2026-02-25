@@ -15,6 +15,7 @@ import { useCategories } from '../contexts/CategoriesContext';
 import CardSelector from '../components/CardSelector';
 import AmountSplitter from '../components/AmountSplitter';
 import ParticipantSelector from '../components/ParticipantSelector';
+import FavoritesDialog from '../components/FavoritesDialog';
 import { nowKST } from '../utils/datetime';
 
 interface UserItem {
@@ -57,6 +58,7 @@ const ManualEntryPage: React.FC = () => {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [favDialog, setFavDialog] = useState(false);
 
   const loadUsers = useCallback(() => {
     usersApi.list().then((res) => setAllUsers(res.data.users));
@@ -300,6 +302,12 @@ const ManualEntryPage: React.FC = () => {
           allUsers={allUsers}
           selectedParticipants={selectedParticipants}
           onToggle={toggleParticipant}
+          onManageFavorites={() => setFavDialog(true)}
+        />
+        <FavoritesDialog
+          open={favDialog}
+          onClose={() => setFavDialog(false)}
+          onChanged={() => loadUsers()}
         />
 
         {/* 금액 분배 (2명 이상) */}
