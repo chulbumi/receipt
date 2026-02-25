@@ -115,10 +115,12 @@ async def get_my_records(
     last_key: Optional[str] = Query(None),
 ):
     table = get_records_table()
+    uid = current_user["user_id"]
+
+    # 1) 내가 등록한 내역 (GSI: registered_by-transaction_date-index)
     kwargs: dict = {
         "IndexName": "registered_by-transaction_date-index",
-        "KeyConditionExpression": Key("registered_by").eq(current_user["user_id"]),
-        "Limit": limit,
+        "KeyConditionExpression": Key("registered_by").eq(uid),
         "ScanIndexForward": False,
     }
     if year_month:
@@ -127,17 +129,52 @@ async def get_my_records(
         kwargs["FilterExpression"] = Attr("category").eq(category)
 
     resp = table.query(**kwargs)
-    items = resp.get("Items", [])
+    my_records = {item["record_id"]: item for item in resp.get("Items", [])}
 
-    for item in items:
+    # 2) 참여자로 포함된 내역 (Scan: participants 리스트 안에 내 user_id)
+    #    year_month 필터를 Scan FilterExpression에 포함
+    scan_filter = Attr("participants").exists() & \
+                  Attr("registered_by").ne(uid)  # 내가 등록한 건 이미 위에서 가져옴
+    if year_month:
+        scan_filter = scan_filter & Attr("year_month").eq(year_month)
+    if category:
+        scan_filter = scan_filter & Attr("category").eq(category)
+
+    scan_resp = table.scan(FilterExpression=scan_filter)
+    for item in scan_resp.get("Items", []):
+        participants = item.get("participants", [])
+        # participants 중 내 user_id가 있는 경우만
+        if any(p.get("user_id") == uid for p in participants):
+            my_records[item["record_id"]] = item
+
+    # 3) 합치고 transaction_date 내림차순 정렬
+    all_items = sorted(
+        my_records.values(),
+        key=lambda x: x.get("transaction_date", ""),
+        reverse=True,
+    )
+
+    # 4) my_amount 계산 및 후처리
+    for item in all_items:
+        _convert_decimal(item)
+        participants = item.get("participants", [])
+        if participants:
+            for p in participants:
+                if p.get("user_id") == uid:
+                    item["my_amount"] = float(p.get("amount", 0))
+                    break
+            else:
+                # participants 있지만 내가 없으면 (내가 등록자인 단독 케이스)
+                item["my_amount"] = float(item.get("total_amount", 0))
+        else:
+            item["my_amount"] = float(item.get("total_amount", 0))
         if item.get("image_key"):
             item["image_url"] = get_presigned_url(item["image_key"])
-        _convert_decimal(item)
 
     return {
-        "records": items,
-        "count": len(items),
-        "last_key": resp.get("LastEvaluatedKey"),
+        "records": all_items,
+        "count": len(all_items),
+        "last_key": None,
     }
 
 
@@ -147,15 +184,36 @@ async def get_calendar_data(
     year_month: str = Query(..., description="YYYY-MM"),
 ):
     table = get_records_table()
+    uid = current_user["user_id"]
+
+    # 1) 내가 등록한 내역 (GSI)
     resp = table.query(
         IndexName="year_month-registered_by_date-index",
         KeyConditionExpression=Key("year_month").eq(year_month)
-        & Key("registered_by_date").begins_with(current_user["user_id"] + "#"),
+        & Key("registered_by_date").begins_with(uid + "#"),
     )
-    items = resp.get("Items", [])
+    seen_ids: set = set()
+    all_items: list = []
+    for item in resp.get("Items", []):
+        seen_ids.add(item["record_id"])
+        all_items.append(item)
 
+    # 2) 참여자로 포함된 내역 (Scan)
+    scan_resp = table.scan(
+        FilterExpression=Attr("year_month").eq(year_month)
+        & Attr("participants").exists()
+        & Attr("registered_by").ne(uid),
+    )
+    for item in scan_resp.get("Items", []):
+        if item["record_id"] in seen_ids:
+            continue
+        participants = item.get("participants", [])
+        if any(p.get("user_id") == uid for p in participants):
+            all_items.append(item)
+
+    # 3) 날짜별 집계 (my_amount 기준)
     daily: dict = {}
-    for item in items:
+    for item in all_items:
         date_str = item["transaction_date"][:10]
         amt = float(item.get("total_amount", 0))
         participants = item.get("participants", [])
@@ -163,7 +221,7 @@ async def get_calendar_data(
         my_amount = amt
         if participants:
             for p in participants:
-                if p.get("user_id") == current_user["user_id"]:
+                if p.get("user_id") == uid:
                     my_amount = float(p.get("amount", 0))
                     break
 

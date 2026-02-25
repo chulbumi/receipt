@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Card, CardContent, TextField, Typography, Button,
-  Chip, Select, MenuItem, FormControl, InputLabel,
-  List, ListItem, ListItemText, ListItemAvatar, ListItemSecondaryAction,
-  IconButton, Divider, Avatar, Checkbox, Tooltip,
+  Select, MenuItem, FormControl, InputLabel,
+  IconButton,
   CircularProgress, Alert, InputAdornment,
 } from '@mui/material';
-import { Save, Star, StarBorder, Add, Delete } from '@mui/icons-material';
+import { Save, Add, Delete } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import type { Category } from '../types';
@@ -14,9 +13,9 @@ import { usersApi, recordsApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useCategories } from '../contexts/CategoriesContext';
 import CardSelector from '../components/CardSelector';
+import AmountSplitter from '../components/AmountSplitter';
+import ParticipantSelector from '../components/ParticipantSelector';
 import { nowKST } from '../utils/datetime';
-
-const MEAL_CATEGORIES: Category[] = ['LUNCH', 'DINNER', 'ENTERTAINMENT'];
 
 interface UserItem {
   user_id: string;
@@ -50,17 +49,14 @@ const ManualEntryPage: React.FC = () => {
   // 주문 세부 내역
   const [orderLines, setOrderLines] = useState<OrderLine[]>([]);
 
-  // 참여자 (식사 카테고리)
+  // 참여자
   const [allUsers, setAllUsers] = useState<UserItem[]>([]);
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [amounts, setAmounts] = useState<Record<string, number>>({});
   const [splitMode, setSplitMode] = useState<'equal' | 'custom'>('equal');
-  const [favoriteLoading, setFavoriteLoading] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  const isMealCategory = MEAL_CATEGORIES.includes(category);
 
   const loadUsers = useCallback(() => {
     usersApi.list().then((res) => setAllUsers(res.data.users));
@@ -84,30 +80,28 @@ const ManualEntryPage: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedParticipants, totalAmount, splitMode]);
 
+  const handleSplitModeChange = (mode: 'equal' | 'custom') => {
+    setSplitMode(mode);
+    if (mode === 'equal') {
+      const total = parseFloat(totalAmount) || 0;
+      const count = selectedParticipants.length || 1;
+      const each = Math.floor(total / count);
+      const next: Record<string, number> = {};
+      selectedParticipants.forEach((uid, i) => {
+        next[uid] = i === 0 ? total - each * (count - 1) : each;
+      });
+      setAmounts(next);
+    }
+  };
+
+  const handleAmountChange = (uid: string, value: number) => {
+    setAmounts((prev) => ({ ...prev, [uid]: value }));
+  };
+
   const toggleParticipant = (uid: string) => {
     setSelectedParticipants((prev) =>
       prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
     );
-  };
-
-  const toggleFavorite = async (uid: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (favoriteLoading) return;
-    setFavoriteLoading(uid);
-    try {
-      const res = await usersApi.toggleFavorite(uid);
-      const { is_favorite } = res.data;
-      setAllUsers((prev) =>
-        prev
-          .map((u) => (u.user_id === uid ? { ...u, is_favorite } : u))
-          .sort((a, b) => {
-            if (a.is_favorite !== b.is_favorite) return a.is_favorite ? -1 : 1;
-            return a.name.localeCompare(b.name, 'ko');
-          })
-      );
-    } finally {
-      setFavoriteLoading(null);
-    }
   };
 
   // 주문 내역 관리
@@ -133,10 +127,19 @@ const ManualEntryPage: React.FC = () => {
     if (!storeName.trim()) { setError('상호명을 입력해주세요.'); return; }
     if (!totalAmount || isNaN(parseFloat(totalAmount))) { setError('결제금액을 입력해주세요.'); return; }
 
+    if (selectedParticipants.length > 1) {
+      const splitTotal = Object.values(amounts).reduce((a, b) => a + b, 0);
+      const total = parseFloat(totalAmount);
+      if (splitTotal !== total) {
+        setError(`금액 분배 합계(₩${splitTotal.toLocaleString()})가 결제금액(₩${total.toLocaleString()})과 일치하지 않습니다.`);
+        return;
+      }
+    }
+
     setSaving(true);
     setError('');
 
-    const participants = isMealCategory
+    const participants = selectedParticipants.length > 1
       ? selectedParticipants.map((uid) => {
           const u = allUsers.find((u) => u.user_id === uid);
           return { user_id: uid, name: u?.name || uid, amount: amounts[uid] || 0 };
@@ -165,9 +168,6 @@ const ManualEntryPage: React.FC = () => {
       setSaving(false);
     }
   };
-
-  const favoriteUsers = allUsers.filter((u) => u.is_favorite && u.user_id !== me?.user_id);
-  const otherUsers = allUsers.filter((u) => !u.is_favorite && u.user_id !== me?.user_id);
 
   return (
     <Layout title="직접 입력" showBack>
@@ -257,7 +257,7 @@ const ManualEntryPage: React.FC = () => {
                       onChange={(e) => updateOrderLine(idx, 'item', e.target.value)}
                       size="small"
                       sx={{ flex: 2 }}
-                      placeholder={isMealCategory ? '예: 삼겹살' : '예: A4용지'}
+                      placeholder="예: 삼겹살"
                     />
                     <TextField
                       label="수량"
@@ -295,154 +295,26 @@ const ManualEntryPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* 참여자 (식사 카테고리만) */}
-        {isMealCategory && (
-          <Card sx={{ mb: 2 }}>
-            <CardContent sx={{ pb: 1 }}>
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                👥 함께한 사람
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                ⭐ 별표로 즐겨찾기 · 체크로 이번 식사 참여자 선택
-              </Typography>
+        {/* 함께한 사람 */}
+        <ParticipantSelector
+          allUsers={allUsers}
+          selectedParticipants={selectedParticipants}
+          onToggle={toggleParticipant}
+        />
 
-              {me && (
-                <Box sx={{ display: 'flex', alignItems: 'center', py: 0.5, px: 0.5, bgcolor: 'action.hover', borderRadius: 1, mb: 1 }}>
-                  <Avatar sx={{ width: 28, height: 28, fontSize: 13, bgcolor: 'primary.main', mr: 1.5 }}>
-                    {me.name?.[0]}
-                  </Avatar>
-                  <Typography variant="body2" flex={1} fontWeight={600}>{me.name} (나)</Typography>
-                  <Checkbox checked size="small" disabled />
-                </Box>
-              )}
-
-              {favoriteUsers.length > 0 && (
-                <>
-                  <Typography variant="caption" color="warning.main" fontWeight={600} sx={{ display: 'block', mt: 1, mb: 0.5 }}>
-                    ⭐ 즐겨찾기
-                  </Typography>
-                  <List dense disablePadding>
-                    {favoriteUsers.map((u) => (
-                      <ListItem key={u.user_id} disablePadding sx={{ py: 0.2, cursor: 'pointer' }} onClick={() => toggleParticipant(u.user_id)}>
-                        <Checkbox checked={selectedParticipants.includes(u.user_id)} size="small" sx={{ p: 0.5 }} />
-                        <ListItemAvatar sx={{ minWidth: 36 }}>
-                          <Avatar sx={{ width: 28, height: 28, fontSize: 13, bgcolor: 'warning.light' }}>{u.name[0]}</Avatar>
-                        </ListItemAvatar>
-                        <ListItemText
-                          primary={u.name} secondary={u.department}
-                          primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
-                          secondaryTypographyProps={{ variant: 'caption' }}
-                        />
-                        <ListItemSecondaryAction>
-                          <Tooltip title="즐겨찾기 해제">
-                            <IconButton size="small" onClick={(e) => toggleFavorite(u.user_id, e)} disabled={favoriteLoading === u.user_id}>
-                              {favoriteLoading === u.user_id ? <CircularProgress size={16} /> : <Star sx={{ color: 'warning.main', fontSize: 20 }} />}
-                            </IconButton>
-                          </Tooltip>
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                    ))}
-                  </List>
-                </>
-              )}
-
-              {otherUsers.length > 0 && (
-                <>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5, mb: 0.5 }}>전체 직원</Typography>
-                  <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
-                    <List dense disablePadding>
-                      {otherUsers.map((u) => (
-                        <ListItem key={u.user_id} disablePadding sx={{ py: 0.2, cursor: 'pointer' }} onClick={() => toggleParticipant(u.user_id)}>
-                          <Checkbox checked={selectedParticipants.includes(u.user_id)} size="small" sx={{ p: 0.5 }} />
-                          <ListItemAvatar sx={{ minWidth: 36 }}>
-                            <Avatar sx={{ width: 28, height: 28, fontSize: 13 }}>{u.name[0]}</Avatar>
-                          </ListItemAvatar>
-                          <ListItemText
-                            primary={u.name} secondary={u.department}
-                            primaryTypographyProps={{ variant: 'body2' }}
-                            secondaryTypographyProps={{ variant: 'caption' }}
-                          />
-                          <ListItemSecondaryAction>
-                            <Tooltip title="즐겨찾기 추가">
-                              <IconButton size="small" onClick={(e) => toggleFavorite(u.user_id, e)} disabled={favoriteLoading === u.user_id}>
-                                {favoriteLoading === u.user_id ? <CircularProgress size={16} /> : <StarBorder sx={{ fontSize: 20, color: 'text.disabled' }} />}
-                              </IconButton>
-                            </Tooltip>
-                          </ListItemSecondaryAction>
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Box>
-                </>
-              )}
-
-              {selectedParticipants.length > 0 && (
-                <Box sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {selectedParticipants.map((uid) => {
-                    const u = allUsers.find((u) => u.user_id === uid);
-                    const isMe = uid === me?.user_id;
-                    return (
-                      <Chip
-                        key={uid} label={u?.name || (isMe ? me?.name : uid)}
-                        size="small" color="primary" variant="filled"
-                        onDelete={isMe ? undefined : () => toggleParticipant(uid)}
-                      />
-                    );
-                  })}
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* 금액 분배 (식사 + 2명 이상) */}
-        {isMealCategory && selectedParticipants.length > 1 && (
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
-                <Typography variant="subtitle1" fontWeight={600}>💰 금액 분배</Typography>
-                <Box>
-                  <Chip label="균등분할" size="small" color={splitMode === 'equal' ? 'primary' : 'default'}
-                    onClick={() => setSplitMode('equal')} sx={{ mr: 1 }} />
-                  <Chip label="직접입력" size="small" color={splitMode === 'custom' ? 'primary' : 'default'}
-                    onClick={() => setSplitMode('custom')} />
-                </Box>
-              </Box>
-
-              {selectedParticipants.map((uid) => {
-                const u = allUsers.find((u) => u.user_id === uid);
-                const isMe = uid === me?.user_id;
-                return (
-                  <Box key={uid} display="flex" alignItems="center" gap={1.5} mb={1.5}>
-                    <Avatar sx={{ width: 32, height: 32, fontSize: 14, bgcolor: isMe ? 'primary.main' : 'grey.400' }}>
-                      {u?.name?.[0] || (isMe ? me?.name?.[0] : uid[0])}
-                    </Avatar>
-                    <Typography flex={1} variant="body2">
-                      {u?.name || (isMe ? me?.name : uid)}{isMe && ' (나)'}
-                    </Typography>
-                    <TextField
-                      value={amounts[uid] || 0}
-                      onChange={(e) => {
-                        setSplitMode('custom');
-                        setAmounts((prev) => ({ ...prev, [uid]: parseFloat(e.target.value) || 0 }));
-                      }}
-                      type="number" size="small" sx={{ width: 120 }}
-                      InputProps={{ startAdornment: <Typography variant="caption" mr={0.5}>₩</Typography> }}
-                    />
-                  </Box>
-                );
-              })}
-
-              <Divider sx={{ my: 1 }} />
-              <Box display="flex" justifyContent="space-between">
-                <Typography variant="body2" color="text.secondary">합계</Typography>
-                <Typography variant="body2" fontWeight={600}>
-                  ₩{Object.values(amounts).reduce((a, b) => a + b, 0).toLocaleString()}
-                  {' / '}₩{(parseFloat(totalAmount) || 0).toLocaleString()}
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
+        {/* 금액 분배 (2명 이상) */}
+        {selectedParticipants.length > 1 && (
+          <AmountSplitter
+            participants={selectedParticipants.map((uid) => {
+              const u = allUsers.find((u) => u.user_id === uid);
+              return { user_id: uid, name: u?.name || (uid === me?.user_id ? me?.name || uid : uid) };
+            })}
+            amounts={amounts}
+            totalAmount={parseFloat(totalAmount) || 0}
+            splitMode={splitMode}
+            onSplitModeChange={handleSplitModeChange}
+            onAmountChange={handleAmountChange}
+          />
         )}
 
         <Button

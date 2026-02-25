@@ -65,6 +65,7 @@ export interface ReceiptRecord {
   card_last4?: string;
   created_at: string;
   year_month: string;
+  my_amount?: number;
 }
 
 export interface Card {

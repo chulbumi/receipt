@@ -1,6 +1,7 @@
 import json
 import re
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from app.config import get_settings
 
 RECEIPT_PROMPT = """
@@ -54,11 +55,13 @@ def analyze_receipt_image(image_bytes: bytes, mime_type: str = "image/jpeg") -> 
             "error": "GEMINI_API_KEY가 설정되지 않았습니다.",
         }
 
-    genai.configure(api_key=settings.gemini_api_key)
-    model = genai.GenerativeModel(settings.gemini_model)
+    client = genai.Client(api_key=settings.gemini_api_key)
 
-    image_part = {"mime_type": mime_type, "data": image_bytes}
-    response = model.generate_content([RECEIPT_PROMPT, image_part])
+    image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+    response = client.models.generate_content(
+        model=settings.gemini_model,
+        contents=[RECEIPT_PROMPT, image_part],
+    )
 
     raw_text = response.text.strip()
     raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)

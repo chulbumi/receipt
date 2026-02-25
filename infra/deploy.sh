@@ -44,19 +44,57 @@ fi
 echo "[2/6] 백엔드 의존성 설치..."
 cd "$ROOT_DIR/backend"
 pip3 install -r requirements.txt -t ./dependencies --quiet
-echo "  -> 완료"
+
+# Lambda 262MB 제한 대응: 불필요한 대용량 패키지 제거
+echo "  -> 불필요한 패키지 정리 중..."
+cd ./dependencies
+# google-generativeai 구 SDK 및 무거운 의존성 제거 (google-genai 신 SDK 사용)
+rm -rf googleapiclient apiclient \
+       google_generativeai-*.dist-info google_ai_generativelanguage-*.dist-info \
+       google_api_python_client-*.dist-info google_api_core-*.dist-info \
+       google_auth_httplib2.py google_auth_httplib2-*.dist-info \
+       httplib2 httplib2-*.dist-info \
+       grpc grpcio-*.dist-info grpc_status \
+       grpcio_status-*.dist-info \
+       proto proto_plus-*.dist-info \
+       uritemplate uritemplate-*.dist-info \
+       pyparsing pyparsing-*.dist-info \
+       tqdm tqdm-*.dist-info \
+       pyasn1_modules pyasn1_modules-*.dist-info \
+       pyasn1 pyasn1-*.dist-info \
+       ecdsa ecdsa-*.dist-info 2>/dev/null || true
+# Pillow: 로컬 빌드본 제거 후 Lambda용(manylinux_2_28_x86_64 cp311) wheel로 교체
+rm -rf PIL pillow.libs Pillow-*.dist-info pillow-*.dist-info
+PILLOW_WHL="/tmp/pillow-lambda/pillow-11.1.0-cp311-cp311-manylinux_2_28_x86_64.whl"
+if [ ! -f "$PILLOW_WHL" ]; then
+  echo "  -> Lambda용 Pillow wheel 다운로드 중..."
+  mkdir -p /tmp/pillow-lambda
+  pip3 download Pillow==11.1.0 \
+    --only-binary=:all: \
+    --platform manylinux_2_28_x86_64 \
+    --python-version 311 \
+    --implementation cp \
+    --abi cp311 \
+    -d /tmp/pillow-lambda/ --quiet
+fi
+unzip -qo "$PILLOW_WHL" -d .
+# 캐시/테스트 제거
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find . -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
+find . -name "*.pyc" -delete 2>/dev/null || true
+cd "$ROOT_DIR/backend"
+echo "  -> 완료 ($(du -sh ./dependencies | cut -f1))"
 
 # ---- 3. SAM 빌드 및 패키징 ----
 echo "[3/6] SAM 패키징..."
-# SAM이 없는 경우 pip로 Lambda 패키지를 수동 생성
 LAMBDA_PKG_DIR="/tmp/receipt-lambda-pkg"
-rm -rf "$LAMBDA_PKG_DIR"
+rm -rf "$LAMBDA_PKG_DIR" /tmp/receipt-lambda.zip
 mkdir -p "$LAMBDA_PKG_DIR"
 
-# 의존성 복사
-cp -r ./dependencies/* "$LAMBDA_PKG_DIR/" 2>/dev/null || true
+# 정리된 의존성 복사
+cp -r "$ROOT_DIR/backend/dependencies/." "$LAMBDA_PKG_DIR/"
 # 앱 코드 복사
-cp -r ./app "$LAMBDA_PKG_DIR/"
+cp -r "$ROOT_DIR/backend/app" "$LAMBDA_PKG_DIR/"
 
 # 패키지 생성
 cd "$LAMBDA_PKG_DIR"

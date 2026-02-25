@@ -6,7 +6,7 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.20
 boto3==1.35.99
-google-generativeai==0.8.3
+google-genai==1.64.0
 Pillow==11.1.0
 python-dotenv==1.0.1
 httpx==0.28.1

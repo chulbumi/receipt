@@ -188,9 +188,16 @@ const CalendarPage: React.FC = () => {
                             </Typography>
                           </Box>
                         </Box>
-                        <Typography variant="body2" fontWeight={700} color="primary.main">
-                          ₩{rec.total_amount?.toLocaleString()}
-                        </Typography>
+                        <Box textAlign="right">
+                          <Typography variant="body2" fontWeight={700} color="primary.main">
+                            ₩{(rec.my_amount ?? rec.total_amount)?.toLocaleString()}
+                          </Typography>
+                          {rec.my_amount != null && rec.my_amount !== rec.total_amount && (
+                            <Typography variant="caption" color="text.secondary">
+                              합계 ₩{rec.total_amount?.toLocaleString()}
+                            </Typography>
+                          )}
+                        </Box>
                       </Box>
                     </Box>
                     {idx < dayRecords.length - 1 && <Divider />}

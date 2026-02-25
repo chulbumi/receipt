@@ -10,7 +10,7 @@ import {
   CreditCard, AdminPanelSettings, Assessment,
   Logout, Lock, People, Star, StarBorder,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../auth/AuthContext';
 import { usersApi, authApi } from '../api/client';
@@ -25,6 +25,7 @@ interface UserItem {
 const MorePage: React.FC = () => {
   const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [allUsers, setAllUsers] = useState<UserItem[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
@@ -37,6 +38,14 @@ const MorePage: React.FC = () => {
   const [newPw, setNewPw] = useState('');
   const [pwError, setPwError] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
+
+  useEffect(() => {
+    if (location.state?.openFavorites) {
+      openPartnerDialog();
+      window.history.replaceState({}, '');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
