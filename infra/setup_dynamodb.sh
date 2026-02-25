@@ -17,13 +17,16 @@ REGION="${AWS_REGION:-ap-northeast-2}"
 USERS_TABLE="${DYNAMODB_USERS_TABLE:-receipt_users}"
 RECORDS_TABLE="${DYNAMODB_RECORDS_TABLE:-receipt_records}"
 CARDS_TABLE="${DYNAMODB_CARDS_TABLE:-receipt_cards}"
+PRESENCE_TABLE="${DYNAMODB_PRESENCE_TABLE:-presence_status}"
+ATTENDANCE_TABLE="${DYNAMODB_ATTENDANCE_TABLE:-attendance_logs}"
+OFFICES_TABLE="${DYNAMODB_OFFICES_TABLE:-office_locations}"
 
 echo "===== DynamoDB 테이블 생성 시작 ====="
 echo "리전: $REGION"
 
 # ---- 1. receipt_users 테이블 ----
 echo ""
-echo "[1/3] 테이블 생성: $USERS_TABLE"
+echo "[1/6] 테이블 생성: $USERS_TABLE"
 if aws dynamodb describe-table --table-name "$USERS_TABLE" --region "$REGION" 2>/dev/null | grep -q "TableName"; then
   echo "  -> 이미 존재합니다. 건너뜁니다."
 else
@@ -42,7 +45,7 @@ fi
 
 # ---- 2. receipt_records 테이블 (GSI 포함) ----
 echo ""
-echo "[2/3] 테이블 생성: $RECORDS_TABLE"
+echo "[2/6] 테이블 생성: $RECORDS_TABLE"
 if aws dynamodb describe-table --table-name "$RECORDS_TABLE" --region "$REGION" 2>/dev/null | grep -q "TableName"; then
   echo "  -> 이미 존재합니다. 건너뜁니다."
 else
@@ -84,7 +87,7 @@ fi
 
 # ---- 3. receipt_cards 테이블 ----
 echo ""
-echo "[3/3] 테이블 생성: $CARDS_TABLE"
+echo "[3/6] 테이블 생성: $CARDS_TABLE"
 if aws dynamodb describe-table --table-name "$CARDS_TABLE" --region "$REGION" 2>/dev/null | grep -q "TableName"; then
   echo "  -> 이미 존재합니다. 건너뜁니다."
 else
@@ -112,8 +115,88 @@ else
   echo "  -> 활성화 완료"
 fi
 
+# ---- 4. presence_status 테이블 ----
+echo ""
+echo "[4/6] 테이블 생성: $PRESENCE_TABLE"
+if aws dynamodb describe-table --table-name "$PRESENCE_TABLE" --region "$REGION" 2>/dev/null | grep -q "TableName"; then
+  echo "  -> 이미 존재합니다. 건너뜁니다."
+else
+  aws dynamodb create-table \
+    --table-name "$PRESENCE_TABLE" \
+    --attribute-definitions \
+      AttributeName=user_id,AttributeType=S \
+    --key-schema \
+      AttributeName=user_id,KeyType=HASH \
+    --billing-mode PAY_PER_REQUEST \
+    --region "$REGION"
+  echo "  -> 생성 요청 완료. 활성화 대기 중..."
+  aws dynamodb wait table-exists --table-name "$PRESENCE_TABLE" --region "$REGION"
+  echo "  -> 활성화 완료"
+
+  # TTL 활성화 (ttl 필드 기준)
+  aws dynamodb update-time-to-live \
+    --table-name "$PRESENCE_TABLE" \
+    --time-to-live-specification "Enabled=true, AttributeName=ttl" \
+    --region "$REGION"
+  echo "  -> TTL 활성화 완료 (ttl 필드)"
+fi
+
+# ---- 5. attendance_logs 테이블 (복합키 + GSI) ----
+echo ""
+echo "[5/6] 테이블 생성: $ATTENDANCE_TABLE"
+if aws dynamodb describe-table --table-name "$ATTENDANCE_TABLE" --region "$REGION" 2>/dev/null | grep -q "TableName"; then
+  echo "  -> 이미 존재합니다. 건너뜁니다."
+else
+  aws dynamodb create-table \
+    --table-name "$ATTENDANCE_TABLE" \
+    --attribute-definitions \
+      AttributeName=user_id,AttributeType=S \
+      AttributeName=date,AttributeType=S \
+    --key-schema \
+      AttributeName=user_id,KeyType=HASH \
+      AttributeName=date,KeyType=RANGE \
+    --global-secondary-indexes \
+      '[
+        {
+          "IndexName": "date-user_id-index",
+          "KeySchema": [
+            {"AttributeName": "date", "KeyType": "HASH"},
+            {"AttributeName": "user_id", "KeyType": "RANGE"}
+          ],
+          "Projection": {"ProjectionType": "ALL"}
+        }
+      ]' \
+    --billing-mode PAY_PER_REQUEST \
+    --region "$REGION"
+  echo "  -> 생성 요청 완료. 활성화 대기 중..."
+  aws dynamodb wait table-exists --table-name "$ATTENDANCE_TABLE" --region "$REGION"
+  echo "  -> 활성화 완료"
+fi
+
+# ---- 6. office_locations 테이블 ----
+echo ""
+echo "[6/6] 테이블 생성: $OFFICES_TABLE"
+if aws dynamodb describe-table --table-name "$OFFICES_TABLE" --region "$REGION" 2>/dev/null | grep -q "TableName"; then
+  echo "  -> 이미 존재합니다. 건너뜁니다."
+else
+  aws dynamodb create-table \
+    --table-name "$OFFICES_TABLE" \
+    --attribute-definitions \
+      AttributeName=office_id,AttributeType=S \
+    --key-schema \
+      AttributeName=office_id,KeyType=HASH \
+    --billing-mode PAY_PER_REQUEST \
+    --region "$REGION"
+  echo "  -> 생성 요청 완료. 활성화 대기 중..."
+  aws dynamodb wait table-exists --table-name "$OFFICES_TABLE" --region "$REGION"
+  echo "  -> 활성화 완료"
+fi
+
 echo ""
 echo "===== DynamoDB 테이블 생성 완료 ====="
 echo "- $USERS_TABLE"
 echo "- $RECORDS_TABLE (GSI: year_month, registered_by)"
 echo "- $CARDS_TABLE (GSI: user_id)"
+echo "- $PRESENCE_TABLE (TTL: ttl)"
+echo "- $ATTENDANCE_TABLE (PK: user_id, SK: date, GSI: date-user_id)"
+echo "- $OFFICES_TABLE"

@@ -22,3 +22,18 @@ def get_records_table():
 def get_cards_table():
     settings = get_settings()
     return get_dynamodb().Table(settings.dynamodb_cards_table)
+
+
+def get_presence_table():
+    settings = get_settings()
+    return get_dynamodb().Table(settings.dynamodb_presence_table)
+
+
+def get_attendance_table():
+    settings = get_settings()
+    return get_dynamodb().Table(settings.dynamodb_attendance_table)
+
+
+def get_offices_table():
+    settings = get_settings()
+    return get_dynamodb().Table(settings.dynamodb_offices_table)

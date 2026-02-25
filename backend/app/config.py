@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     dynamodb_users_table: str = "receipt_users"
     dynamodb_records_table: str = "receipt_records"
     dynamodb_cards_table: str = "receipt_cards"
+    dynamodb_presence_table: str = "presence_status"
+    dynamodb_attendance_table: str = "attendance_logs"
+    dynamodb_offices_table: str = "office_locations"
 
     jwt_secret_key: str = "changeme"
     jwt_algorithm: str = "HS256"
