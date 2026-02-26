@@ -18,6 +18,8 @@
 9. [로컬 개발 실행](#9-로컬-개발-실행)
 10. [Lambda 배포 절차](#10-lambda-배포-절차)
 
+> **최종 업데이트:** 2026-02-26 — 조직 구조 API (`/api/org`) 추가, google-genai SDK 교체, 참여자 내역 조회 개선
+
 ---
 
 ## 1. 시스템 아키텍처
@@ -48,8 +50,8 @@
 | Boto3 | 1.35.x | AWS SDK (DynamoDB, S3) |
 | python-jose | 3.3.x | JWT 토큰 생성/검증 |
 | passlib[bcrypt] | 1.7.x | 비밀번호 해싱 (bcrypt) |
-| google-generativeai | 0.8.x | Gemini API 클라이언트 |
-| Pillow | 12.1.x | 이미지 압축 (manylinux2014) |
+| google-genai | 1.64.x | Gemini API 클라이언트 (신 SDK) |
+| Pillow | 11.1.x | 이미지 압축 (manylinux_2_28_x86_64) |
 
 ---
 
@@ -70,6 +72,7 @@
 | DynamoDB | `presence_status` | 직원 실시간 재실 상태 (TTL 24h) |
 | DynamoDB | `attendance_logs` | 출퇴근 기록 |
 | DynamoDB | `office_locations` | 사무실 위치/Wi-Fi 설정 |
+| DynamoDB | `org_units` | 조직/팀 계층 구조 |
 | AWS 리전 | `ap-northeast-2` | 서울 |
 
 ---
@@ -94,6 +97,7 @@ DYNAMODB_CARDS_TABLE=receipt_cards
 DYNAMODB_PRESENCE_TABLE=presence_status
 DYNAMODB_ATTENDANCE_TABLE=attendance_logs
 DYNAMODB_OFFICES_TABLE=office_locations
+DYNAMODB_ORG_TABLE=org_units
 
 # JWT
 JWT_SECRET_KEY=<openssl rand -hex 32 으로 생성>
@@ -168,8 +172,8 @@ Authorization: Bearer <access_token>
 
 | role | 접근 가능 API |
 |---|---|
-| `user` | `/api/auth/*`, `/api/users/*`, `/api/records/*`, `/api/receipts/*`, `/api/cards/*`, `/api/categories` |
-| `admin` | 위 전체 + `/api/admin/*` |
+| `user` | `/api/auth/*`, `/api/users/*`, `/api/records/*`, `/api/receipts/*`, `/api/cards/*`, `/api/categories`, `GET /api/org` |
+| `admin` | 위 전체 + `/api/admin/*`, `POST/PUT/DELETE /api/org` |
 
 ---
 
@@ -314,6 +318,42 @@ Authorization: Bearer <access_token>
 
 ---
 
+### `org_units` — 조직 계층 테이블
+
+> **Presence 앱의 조직/팀 계층 구조를 저장하는 테이블**
+
+**Primary Key:** `org_id` (String, HASH)
+
+**Global Secondary Index:** `parent_org_id-index` (`parent_org_id` HASH) → 하위 조직 목록 조회용
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `org_id` | String | PK (예: `org_1772082915_97zcy`) |
+| `name` | String | 조직 이름 (예: "개발본부", "백엔드팀") |
+| `leader_id` | String | 수장의 `user_id` (`receipt_users.user_id` 참조) |
+| `member_ids` | List\<String\> | 직속 멤버 `user_id` 목록 (수장 포함) |
+| `parent_org_id` | String | 상위 조직 `org_id`. **최상위이면 `"ROOT"` 고정값** |
+| `order` | Number | 동일 레벨 내 표시 순서 (0부터) |
+| `created_at` | String | ISO 8601 UTC |
+| `updated_at` | String | ISO 8601 UTC |
+
+**예시 레코드:**
+
+```json
+{
+  "org_id": "org_1772082915_abc12",
+  "name": "개발본부",
+  "leader_id": "cbkim@gaias.co.kr",
+  "member_ids": ["cbkim@gaias.co.kr", "dev01", "dev02"],
+  "parent_org_id": "ROOT",
+  "order": 0,
+  "created_at": "2026-02-26T00:00:00+00:00",
+  "updated_at": "2026-02-26T00:00:00+00:00"
+}
+```
+
+---
+
 ### `office_locations` — 사무실 위치 테이블
 
 **Primary Key:** `office_id` (String, HASH)
@@ -402,6 +442,10 @@ Authorization: Bearer <access_token>
 | POST | `/api/admin/presence/offices` | ✓ | admin | 사무실 등록 |
 | PUT | `/api/admin/presence/offices/{id}` | ✓ | admin | 사무실 정보 수정 |
 | DELETE | `/api/admin/presence/offices/{id}` | ✓ | admin | 사무실 삭제 |
+| GET | `/api/org` | ✓ | user | 전체 조직 목록 조회 |
+| POST | `/api/org` | ✓ | admin | 조직 생성 |
+| PUT | `/api/org/{org_id}` | ✓ | admin | 조직 수정 |
+| DELETE | `/api/org/{org_id}` | ✓ | admin | 조직 삭제 (하위 포함) |
 
 ---
 
@@ -906,6 +950,115 @@ Query Parameters:
 
 ---
 
+### 조직 구조 (Org)
+
+#### `GET /api/org` — 전체 조직 목록
+
+모든 조직을 평탄한 배열로 반환합니다. 클라이언트에서 `parent_org_id`를 이용해 트리를 구성합니다.
+
+```json
+// Response 200
+{
+  "orgs": [
+    {
+      "org_id": "org_1772082915_abc12",
+      "name": "개발본부",
+      "leader_id": "cbkim@gaias.co.kr",
+      "member_ids": ["cbkim@gaias.co.kr", "dev01", "dev02"],
+      "parent_org_id": "ROOT",
+      "order": 0,
+      "created_at": "2026-02-26T00:00:00+00:00",
+      "updated_at": "2026-02-26T00:00:00+00:00"
+    },
+    {
+      "org_id": "org_1772082999_xyz99",
+      "name": "백엔드팀",
+      "leader_id": "dev01",
+      "member_ids": ["dev01", "dev03", "dev04"],
+      "parent_org_id": "org_1772082915_abc12",
+      "order": 0,
+      "created_at": "2026-02-26T00:00:00+00:00",
+      "updated_at": "2026-02-26T00:00:00+00:00"
+    }
+  ],
+  "count": 2
+}
+```
+
+> 결과는 `parent_org_id` → `order` 순으로 정렬됩니다. `parent_org_id == "ROOT"` 인 항목이 최상위 조직입니다.
+
+#### `POST /api/org` — 조직 생성 (admin 전용)
+
+```json
+// Request
+{
+  "name": "백엔드팀",
+  "leader_id": "dev01",
+  "member_ids": ["dev01", "dev03", "dev04"],
+  "parent_org_id": "org_1772082915_abc12",   // 최상위이면 "ROOT"
+  "order": 0                                   // 선택, 기본 0
+}
+
+// Response 201
+{
+  "message": "조직이 생성되었습니다.",
+  "org_id": "org_1772082999_xyz99"
+}
+
+// Response 400: name 누락, leader_id가 존재하지 않는 user 또는 inactive
+// Response 403: admin 아님
+```
+
+**서버 처리:**
+- `org_id` = `f"org_{unix_timestamp}_{random5}"` 형식으로 자동 생성
+- `leader_id`가 `receipt_users`에 존재하고 `status != inactive`인지 확인
+- `member_ids` 에 `leader_id` 자동 포함 (set 처리)
+- `created_at`, `updated_at` = 현재 UTC ISO 8601
+
+#### `PUT /api/org/{org_id}` — 조직 수정 (admin 전용)
+
+부분 업데이트 가능 — 변경할 필드만 전송합니다.
+
+```json
+// Request (모두 선택 사항)
+{
+  "name": "백엔드팀 (신설)",
+  "leader_id": "dev02",
+  "member_ids": ["dev02", "dev03", "dev05"],
+  "parent_org_id": "org_1772082915_abc12",
+  "order": 1
+}
+
+// Response 200
+{ "message": "조직이 수정되었습니다." }
+
+// Response 404: org_id 없음
+// Response 400: 순환 참조 (parent_org_id가 자신의 하위 조직)
+// Response 403: admin 아님
+```
+
+**서버 처리:**
+- `member_ids` 변경 시 `leader_id` 자동 포함
+- `parent_org_id` 변경 시 순환 참조 방지 (하위 조직을 상위로 지정 불가)
+- `updated_at` 자동 갱신
+
+#### `DELETE /api/org/{org_id}` — 조직 삭제 (admin 전용)
+
+해당 조직과 **모든 하위 조직을 재귀적으로 삭제**합니다.
+
+```json
+// Response 200
+{
+  "message": "조직이 삭제되었습니다.",
+  "deleted_count": 3    // 삭제된 조직 수 (자신 포함)
+}
+
+// Response 404: org_id 없음
+// Response 403: admin 아님
+```
+
+---
+
 ## 8. 다른 프로젝트에서 사용자 정보 공유하기
 
 ### 방법 1. DynamoDB 테이블 직접 공유 (권장)
@@ -1143,6 +1296,7 @@ aws lambda update-function-configuration \
     DYNAMODB_PRESENCE_TABLE=presence_status,
     DYNAMODB_ATTENDANCE_TABLE=attendance_logs,
     DYNAMODB_OFFICES_TABLE=office_locations,
+    DYNAMODB_ORG_TABLE=org_units,
     S3_IMAGES_BUCKET=receipt-images-493162620368,
     AWS_REGION=ap-northeast-2
   }"
