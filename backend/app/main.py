@@ -12,6 +12,7 @@ from app.admin.router import router as admin_router
 from app.presence.router import router as presence_router
 from app.attendance.router import router as attendance_router
 from app.admin.presence_router import router as admin_presence_router
+from app.org.router import router as org_router
 from app.categories import load_categories
 
 app = FastAPI(
@@ -39,6 +40,7 @@ app.include_router(admin_router)
 app.include_router(presence_router)
 app.include_router(attendance_router)
 app.include_router(admin_presence_router)
+app.include_router(org_router)
 
 
 @app.get("/api/health")
